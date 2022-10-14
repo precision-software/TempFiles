@@ -13,11 +13,9 @@
 #include <memory.h>
 #include <assert.h>
 
-#include "error.h"
-#include "filter.h"
-
-// Byte and Error belong elsewhere.
-typedef unsigned char Byte;
+#include "filter/error.h"
+#include "filter/filter.h"
+#include "filter/buffer.h"  // Byte
 
 /* Open a file */
 typedef struct OpenRequest {

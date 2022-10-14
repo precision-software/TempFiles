@@ -47,6 +47,7 @@ bufferFilterOpen(BufferFilter *this, OpenRequest *req)
     if (errorIsOK(req->error)) {
         this->blockSize = req->blockSize;
         this->buf = bufferNew(this->blockSize);
+        req->blockSize = 1;
     }
 }
 
@@ -155,10 +156,10 @@ Filter *bufferFilterNew(Filter *next)
 {
     BufferFilter *this = palloc(sizeof(BufferFilter));
     *this = (BufferFilter) {
-            .header = (Filter){
-                    .next = next,
-                    .iface = &bufferFilterInterface
-            }
+        .header = (Filter){
+            .next = next,
+            .iface = &bufferFilterInterface
+        }
     };
 
     return (Filter *)this;

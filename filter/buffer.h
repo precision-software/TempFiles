@@ -26,6 +26,7 @@ typedef struct Buffer
 } Buffer;
 
 inline static size_t sizeMin(size_t size1, size_t size2) {return (size1<size2)? size1: size2;}
+inline static size_t sizeMax(size_t size1, size_t size2) {return (size1>size2)? size1: size2;}
 
 inline static bool bufferIsEmpty(Buffer *this) {return this->readPtr == this->writePtr;}
 inline static bool bufferIsFull(Buffer *this) {return this->writePtr == this->endPtr;}

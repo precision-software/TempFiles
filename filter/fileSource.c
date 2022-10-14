@@ -4,10 +4,9 @@
 #include "passThrough.h"
 #include "fileSource.h"
 
-
-typedef struct FileSource {
+struct FileSource {
     Filter header;
-} FileSource;
+};
 
 
 Error fileOpen(FileSource *this, const char *path, int mode, int perm)
@@ -51,7 +50,7 @@ void fileClose(FileSource *this, Error *error)
 {
     CloseRequest req = (CloseRequest){};
     passThroughClose(this, &req);
-    if (errorIsOK(*error))
+    if (errorIsOK(*error) || errorIsEOF(*error))
         *error = req.error;
 }
 
@@ -60,7 +59,7 @@ fileSourceNew(Filter *next)
 {
     FileSource *this = malloc(sizeof(FileSource));
     *this = (FileSource) {
-            .header = (Filter){.next=next, .iface=&passThroughInterface}
+        .header = (Filter){.next=next, .iface=&passThroughInterface}
     };
 
     return this;

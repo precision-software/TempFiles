@@ -4,7 +4,8 @@
 #include "error.h"
 #include "passThrough.h"
 
-static const Error notInSink = (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
+static const Error notInSink =
+        (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
 /****
 * Pass Through filter which does nothing.

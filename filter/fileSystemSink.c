@@ -10,14 +10,14 @@
 
 
 /* A conventional POSIX file system for reading/writing a file. */
-typedef struct FileSystemSink {
+struct FileSystemSink {
     Filter header;                                                  // first in every Filter.
     size_t blockSize;                                               // The unbuffered preferred size for I/O.
     int fd;                                                         // The file descriptor for the currrently open file.
     bool writable;                                                  // Can we write to the file?
     bool readable;                                                  // Can we read from the file?
     bool eof;                                                       // Has the currently open file read past eof?
-} FileSystemSink;
+};
 
 
 void fileSystemOpen(FileSystemSink *this, OpenRequest *req)

@@ -2,8 +2,6 @@
 #ifndef UNTITLED1_FILTER_H
 #define UNTITLED1_FILTER_H
 
-typedef unsigned char byte;
-
 #include <stddef.h>
 #include <stdbool.h>
 #include "request.h"

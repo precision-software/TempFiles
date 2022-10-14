@@ -1,9 +1,10 @@
 /*  */
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "bufferFilter.h"
-#include "fileSystemSink.h"
-#include "fileSource.h"
+#include "filter/bufferFilter.h"
+#include "filter/fileSystemSink.h"
+#include "compress/lz4Compress.h"
+#include "filter/fileSource.h"
 
 int main() {
 
@@ -27,5 +28,13 @@ int main() {
     buf[13] = '\0';
     printf("Read back: %s", buf);
 
+    FileSource *compressed = fileSourceNew(lz4CompressFilterNew(bufferFilterNew( fileSystemSinkNew() ), 16*1024));
+    error = fileOpen(compressed, "/tmp/testFile.lz4", O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    count = fileWrite(compressed, (Byte*)"Hello World!\n", 13, &error);
+    fileClose(compressed, &error);
+    if (!errorIsOK(error))
+        printf("The error msg: (%d) %s\n", error.code, error.msg);
+
     return 0;
 }
+// TODO: Make it OK to clase an already closed pipeline.
