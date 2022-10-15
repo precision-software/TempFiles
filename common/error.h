@@ -11,6 +11,9 @@ Prototype Error handling.
 #include <string.h>
 #include <stdio.h>
 
+// This file is included everywhere, so define Byte here for now.
+typedef unsigned char Byte;
+
 #define debug printf
 //#define debug (void)
 

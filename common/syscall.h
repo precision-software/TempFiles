@@ -8,8 +8,6 @@
 #include <stddef.h>
 #include "common/error.h"
 
-typedef unsigned char Byte;
-
 int sys_open(char *path, int oflag, int perm, Error *error);
 size_t sys_read(int fd, Byte *buf, size_t size, Error *error);
 size_t sys_write(int fd, Byte *buf, size_t size, Error *error);

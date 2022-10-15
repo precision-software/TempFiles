@@ -13,8 +13,6 @@
 #include <stdbool.h>
 #include "common/error.h"
 
-typedef unsigned char Byte;
-
 // A generic data buffer.
 typedef struct Buffer
 {
