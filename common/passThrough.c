@@ -1,80 +1,83 @@
 //
 // Created by John Morris on 10/10/22.
 //
-#include "error.h"
+#include "common/error.h"
+#include "assert.h"
 #include "passThrough.h"
 
 static Error notInSink =
         (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
 /****
-* Pass Through filter which does nothing.
+PassThrough macro which finds "next" the following filter which will process the request
+Avoids a lot of repetition, intended for lazy typists.
 */
-#define getNextFn(this, request, fn, error) \
-    Filter##request fn;\
-    do {                             \
-        this = ((Filter*)this)->next;\
-        fn = ((Filter*)this)->iface->fn##request;  \
-    } while (this != NULL && fn == NULL);          \
-    if (fn == NULL)                  \
+#define passThroughGetNext(call, error, errorReturn) \
+    if (isError(error)) return errorReturn;  \
+    Filter *next = (Filter*)this;\
+    do {\
+        next = next->next; \
+    } while (next != NULL && next->iface->fn##call == NULL); \
+    if (next == NULL) { \
         error = notInSink; \
-    else (void)0
+        return errorReturn; \
+    }
 
 // Declare pass through functions for each type of request.
 Error passThroughOpen(void *this, char *path, int mode, int perm)
 {
     Error error = errorOK;
-    getNextFn(this, Open, fn, error);
-    if (errorIsOK(error))
-        error = fn(this, path, mode, perm);
-    return error;
+    passThroughGetNext(Open, error, error);
+    return next->iface->fnOpen(next, path, mode, perm);
 }
 
 size_t passThroughRead(void *this, Byte *buf, size_t size, Error *error)
 {
-    getNextFn(this, Read, fn, *error);
-    if (!errorIsOK(*error))
-        return 0;
-    return fn(this, buf, size, error);
+    passThroughGetNext(Read, *error, 0);
+    return next->iface->fnRead(next, buf, size, error);
 }
 
 size_t passThroughWrite(void *this, Byte *buf, size_t size, Error *error)
 {
-    getNextFn(this, Read, fn, *error);
-    if (!errorIsOK(*error))
-        return 0;
-    return fn(this, buf, size, error);
+    passThroughGetNext(Write, *error, 0);
+    size_t actual = next->iface->fnWrite(next, buf, size, error);
+    assert(actual <= size);
+    return actual;
 }
 
 void passThroughClose(void *this, Error *error)
 {
-    getNextFn(this, Close, fn, *error);
-    fn(this, error);
+    passThroughGetNext(Close, *error, (void)0);
+    return next->iface->fnClose(next, error);
 }
 
 
 /***********************************************************************************************************************************
 Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).
 ***********************************************************************************************************************************/
-size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error)
+size_t passThroughWriteAll(void *this, Byte *buf, size_t bufSize, Error *error)
 {
+    assert ((ssize_t)bufSize > 0);
+    if (isError(*error))
+        return 0;
+
     // Start out empty, but count the bytes as we write them out.
     size_t totalSize = 0;
 
     // Repeat until all the bytes are written.
     do {
         // Issue the next write, exiting on error.
-        size_t actualSize = passThroughWrite(this, buf, size, error);
-        if (!errorIsOK(*error))
+        size_t actualSize = passThroughWrite(this, buf, bufSize, error);
+        if (isError(*error))
             break;
 
         // Update the bytes transferred so far.
         buf += actualSize;
-        size -= actualSize;
+        bufSize -= actualSize;
         totalSize += actualSize;
 
     // End "Repeat until all the bytes are written"
-    } while (size > 0);
+    } while (bufSize > 0);
 
     return totalSize;
 }
@@ -91,7 +94,7 @@ size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error)
     do {
         // Issue the next read, exiting on error or eof.
         size_t actualSize = passThroughRead(this, buf, size, error);
-        if (!errorIsOK(*error))
+        if (isError(*error))
             break;
 
         // Update the bytes transferred so far.

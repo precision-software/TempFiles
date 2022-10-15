@@ -3,11 +3,10 @@
 //
 #include <sys/fcntl.h>
 #include <unistd.h>
-#include "error.h"
-#include "passThrough.h"
+#include "common/syscall.h"
+#include "common/passThrough.h"
 #include "fileSystemSink.h"
-#include "request.h"
-
+#include "common/request.h"
 
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
@@ -17,7 +16,6 @@ struct FileSystemSink {
     bool readable;                                                  // Can we read from the file?
     bool eof;                                                       // Has the currently open file read past eof?
 };
-
 
 Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
@@ -31,11 +29,10 @@ Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
         perm = 0666;
 
     // Open the file and check for errors.
-    this->fd = open(path, mode, perm);
-    if (this->fd == -1)
-        return systemError();
+    Error error = errorOK;
+    this->fd = sys_open(path, mode, perm, &error);
 
-    return errorOK;
+    return error;
 }
 
 size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
@@ -43,14 +40,10 @@ size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *e
     // Truncate large unbuffered writes to a multiple of blockSize,
     // Smaller writes go through on the premise they are at the end of the file.
     size_t blockSize = this->header.blockSize;
-    size_t size = sizeMin(blockSize, sizeRoundDown(bufSize, blockSize));
+    size_t size = sizeMax(bufSize, sizeRoundDown(bufSize, blockSize));
 
-    // Write the data and check for errors.
-    size_t actualSize = write(this->fd, buf, size);
-    if (actualSize == -1)
-        *error = systemError();
-
-    return actualSize;
+    // Write the data.
+    return sys_write(this->fd, buf, size, error);
 }
 
 static Error errorReadTooSmall =
@@ -62,53 +55,20 @@ size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t bufSize, Error *er
     size_t blockSize = this->header.blockSize;
     size_t size = sizeRoundDown(bufSize, blockSize);
 
-    size_t actualSize = 0;
+    // Check for errors: existing, previous read had EOF, read must be at least one block in size.
+    if (isError(*error))                 ;
+    else if (this->eof)                  *error = errorEOF;
+    else if (size < blockSize)           *error = errorReadTooSmall;
 
-    // CASE: we hit an error earlier, then just return the error
-    if (!errorIsOK(*error))
-        ;
-
-    // CASE: we had eof on last read. Return eof now.
-    else if (this->eof)
-        *error = errorEOF;
-
-    // CASE: error - Unbuffered reads must be at least one block in size.
-    else if (size < blockSize)
-        *error = errorReadTooSmall;
-
-    // OTHERWISE: Normal read.
-    else
-    {
-        // Read from the file and check for system errors.
-        actualSize = read(this->fd, buf, size);
-        if (actualSize == -1)
-            *error = systemError();
-
-        // Also check for EOF for future reads.
-        this->eof = actualSize == 0;
-        if (this->eof)
-            *error = errorEOF;
-    }
-
-    if (errorIsOK(*error))
-        return actualSize;
-    else
-        return 0;
+    return sys_read(this->fd, buf, size, error);
 }
 
-
-void fileSystemClose(FileSystemSink *this, CloseRequest *req)
+void fileSystemClose(FileSystemSink *this, Error *error)
 {
-    req->error = errorOK;
-
     // Close the fd if it was opened earlier.
-    if (this->fd != -1 && close(this->fd) == -1)
-        req->error = systemError();
-
-    // Don't try to close it a second time.
+    sys_close(this->fd, error);
     this->fd = -1;
 }
-
 
 FilterInterface fileSystemInterface = (FilterInterface)
 {

@@ -20,6 +20,8 @@ Error bufferForceFlush(Buffer *buf, void *filter) // TODO: pass *error as a para
     if (remaining > 0)
         passThroughWriteAll(filter, buf->readPtr, remaining, &error);
 
+    bufferReset(buf);
+
     return error;
 }
 

@@ -5,10 +5,10 @@
 #ifndef FILTER_FILESOURCE_H
 #define FILTER_FILESOURCE_H
 
-#include "error.h"
-#include "filter.h"
-#include "passThrough.h"
-#include "request.h"
+#include "common/error.h"
+#include "common/filter.h"
+#include "common/passThrough.h"
+#include "common/request.h"
 
 typedef struct FileSource FileSource;
 

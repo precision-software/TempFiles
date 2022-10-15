@@ -4,8 +4,8 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "filter/request.h"
-#include "filter/buffer.h"
+#include "request.h"
+#include "common/buffer.h"
 
 /***********************************************************************************************************************************
 The basic filter which serves as a header for all other filter types.

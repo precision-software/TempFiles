@@ -6,7 +6,7 @@
 #define FILTER_LZ4DECOMPRESS_H
 
 #include <stddef.h>
-#include "filter/filter.h"
+#include "common/filter.h"
 
 typedef struct Lz4DecompressFilter Lz4DecompressFilter;
 Filter *lz4DecompressFilterNew(Filter *next, size_t blockSize);

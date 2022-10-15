@@ -5,7 +5,7 @@
 #ifndef UNTITLED1_BUFFERFILTER_H
 #define UNTITLED1_BUFFERFILTER_H
 
-#include "filter.h"
+#include "common/filter.h"
 
 typedef struct BufferFilter BufferFilter;
 Filter *bufferFilterNew(Filter *next);

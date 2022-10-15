@@ -3,9 +3,9 @@
 ***********************************************************************************************************************************/
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
-#include "error.h"
-#include "buffer.h"
-#include "passThrough.h"
+#include "common/error.h"
+#include "common/buffer.h"
+#include "common/passThrough.h"
 
 #include "bufferFilter.h"
 

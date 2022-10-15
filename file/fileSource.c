@@ -1,7 +1,7 @@
 //
 // Created by John Morris on 10/12/22.
 //
-#include "passThrough.h"
+#include "common/passThrough.h"
 #include "fileSource.h"
 
 struct FileSource {

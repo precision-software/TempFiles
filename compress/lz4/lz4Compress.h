@@ -6,7 +6,7 @@
 #define FILTER_LZ4COMPRESS_H
 
 #include <stddef.h>
-#include "filter/filter.h"
+#include "common/filter.h"
 
 
 typedef struct Lz4CompressFilter Lz4CompressFilter;

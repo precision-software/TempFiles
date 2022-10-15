@@ -5,7 +5,7 @@
 #ifndef UNTITLED1_FILESYSTEMSINK_H
 #define UNTITLED1_FILESYSTEMSINK_H
 
-#include "filter.h"
+#include "common/filter.h"
 
 typedef struct FileSystemSink FileSystemSink;
 Filter *fileSystemSinkNew(void);

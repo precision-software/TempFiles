@@ -9,6 +9,10 @@ Prototype Error handling.
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <stdio.h>
+
+#define debug printf
+//#define debug (void)
 
 typedef struct Error {
     int code;                                                       // negative is system, positive is enum.  zero is OK.
@@ -24,6 +28,7 @@ typedef enum ErrorCode {
 } ErrorCode;
 
 inline static bool errorIsOK(Error error) {return error.code == errorCodeOK;}
+inline static bool isError(Error error) {return !errorIsOK(error);}
 inline static bool errorIsEOF(Error error) {return error.code == errorCodeEOF; }
 inline static bool errorIsSystem(Error error) {return error.code < 0;}
 

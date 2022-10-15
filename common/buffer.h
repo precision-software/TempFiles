@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <memory.h>
 #include <stdbool.h>
-#include "error.h"
+#include "common/error.h"
 
 typedef unsigned char Byte;
 
@@ -30,9 +30,12 @@ inline static size_t sizeMax(size_t size1, size_t size2) {return (size1>size2)? 
 inline static size_t sizeRoundDown(size_t size, size_t itemSize) {return size / itemSize * itemSize;}
 inline static size_t sizeRoundUp(size_t size, size_t itemSize) {return sizeRoundDown(size+itemSize-1, itemSize);}
 
-inline static bool bufferIsEmpty(Buffer *this) {return this->readPtr == this->writePtr;}
-inline static bool bufferIsFull(Buffer *this) {return this->writePtr == this->endPtr;}
-inline static bool bufferIsDirty(Buffer *this) {return this->writePtr > this->readPtr;}
+inline static size_t bufferAvail(Buffer *this) {return this->endPtr - this -> writePtr;}
+inline static bool bufferIsFull(Buffer *this) {return bufferAvail(this) == 0;}
+
+inline static size_t bufferCount(Buffer *this){return this->writePtr - this->readPtr;}
+inline static bool bufferIsEmpty(Buffer *this) {return bufferCount(this) == 0;}
+
 inline static size_t bufferSize(Buffer *this) {return this->endPtr - this->buf;}
 
 inline static void
@@ -40,6 +43,7 @@ bufferReset(Buffer *this)
 {
     this->readPtr = this->writePtr = this->buf;
 }
+
 
 inline static size_t
 readFromBuffer(Buffer *this, Byte *buf, size_t bufSize)

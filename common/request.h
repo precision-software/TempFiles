@@ -13,9 +13,9 @@
 #include <memory.h>
 #include <assert.h>
 
-#include "filter/error.h"
-#include "filter/filter.h"
-#include "filter/buffer.h"  // Byte
+#include "common/error.h"
+#include "common/filter.h"
+#include "common/buffer.h"  // Byte
 
 /* Open a file */
 typedef struct OpenRequest {

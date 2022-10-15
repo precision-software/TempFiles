@@ -2,12 +2,12 @@
 // Created by John Morris on 10/13/22.
 //
 
-#include "compress/lz4Decompress.h"
+#include "lz4Decompress.h"
 #include <lz4frame.h>
-#include "compress/lz4Compress.h"
-#include "filter/buffer.h"
-#include "filter/passThrough.h"
-#include "filter/filter.h"
+#include "lz4Compress.h"
+#include "common/buffer.h"
+#include "common/passThrough.h"
+#include "common/filter.h"
 
 struct Lz4DecompressFilter
 {
@@ -16,9 +16,11 @@ struct Lz4DecompressFilter
     size_t bufferSize;  // big enough to hold max compressed block size
     Buffer *buf;        // our buffer.
     LZ4F_dctx *dctx;    // Pointer to an LZ4 context structure, managed by the lz4 library.
-    Error error;
 };
 
+static Error errorLZ4(size) {
+    if (!LZ4F_isError(size)) return errorOK; return (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
+}
 static const Error errorLZ4ContextFailed =
         (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
 
@@ -38,7 +40,8 @@ lz4DecompressFilterNew(Filter *next, size_t bufferSize)
                     .iface = &lz4DecompressInterface,
                     .blockSize = 1
             },
-            .buf = bufferNew(bufferSize)
+            .buf = bufferNew(bufferSize),
+            .dctx = NULL
     };
 
     return (Filter*)this;
@@ -64,29 +67,37 @@ static const Error errorLz4FailedToDecompress =
         {.code=errorCodeFilter, .msg="LZ4 Failed to decompress buffer", .causedBy=NULL};
 
 size_t
-lz4DecompressRead(Lz4DecompressFilter *this, Byte *buf, size_t bufSize, Error *error)
+lz4DecompressRead(Lz4DecompressFilter *this, Byte *decompressedBytes, size_t decompressedSize, Error *error)
 {
+    if (isError(*error))  return 0;
+
     // Get more data if the buffer is empty.
-    if (errorIsOK(*error))
-        *error = bufferFill(this->buf, this);
+    *error = bufferFill(this->buf, this);
+    if (isError(*error))  return 0;
 
-    // Decompress what we have into the caller's buffer.
+    // We are taking compressed bytes from our buffer and returning decompressed bytes to our caller.
     size_t compressedSize = this->buf->writePtr - this->buf->readPtr;
-    size_t decompressedSize = bufSize;
-    if (errorIsOK(*error))
+    Byte *compressedBytes = this->buf->readPtr;
+
+    // Decompress some of the data and check for errors.
+    // "decompressedSize" and "compressedSize" are updated to indicate how many bytes were decompressed.
+    // "nextSize is a hint about how large the decompressed buffer should be for next time.
+    size_t nextSize = LZ4F_decompress(this->dctx, decompressedBytes, &decompressedSize,
+                                      compressedBytes, &compressedSize, NULL);
+    if (LZ4F_isError(nextSize))
     {
-        size_t nextSize = LZ4F_decompress(this->dctx, buf, &decompressedSize, this->buf->readPtr, &compressedSize, NULL);
-        this->buf->readPtr += compressedSize;
-        if (bufferIsEmpty(this->buf)) bufferReset(this->buf); // TODO: DRY
-
-        // Verify the decompression went as planned.
-        if (LZ4F_isError(nextSize))
-            *error = errorLz4FailedToDecompress;
-
-        // TODO: increase size of this->buf so it holds nextSize bytes.
+        *error = errorLZ4(nextSize);
+        return 0;
     }
 
-    return errorIsOK(*error)? compressedSize: 0;
+    // Remove compressed data from the internal buffer.  // TODO: DRY
+    this->buf->readPtr += compressedSize;
+    if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
+
+    // Increase size of this->buf so it holds nextSize bytes.
+    // TODO:
+
+    return decompressedSize;
 }
 
 
