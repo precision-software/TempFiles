@@ -13,7 +13,7 @@
 typedef struct FileSource FileSource;
 
 FileSource *fileSourceNew(Filter *filter);
-Error fileOpen(FileSource *this, const char *path, int mode, int perm);
+Error fileOpen(FileSource *this, char *path, int mode, int perm);
 
 size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error);

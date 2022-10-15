@@ -18,7 +18,7 @@ int main() {
     if (!errorIsOK(error))
         printf("The error msg: (%d) %s\n", error.code, error.msg);
 
-    Byte buf[1024]; strcpy(buf, "Buffer data not read in yet");
+    Byte buf[1024]; strcpy((char*)buf, "Buffer data not read in yet");
     error = fileOpen(stream, "/tmp/testFile", O_RDONLY, 0666);
     count = fileRead(stream, buf, sizeof(buf), &error);
     fileClose(stream, &error);
@@ -36,7 +36,7 @@ int main() {
     if (!errorIsOK(error))
         printf("The error msg: (%d) %s\n", error.code, error.msg);
 
-    strcpy(buf, "Buffer data not read in yet");
+    strcpy((char*)buf, "Buffer data not read in yet");
     FileSource *decompress = fileSourceNew(lz4DecompressFilterNew(bufferFilterNew (fileSystemSinkNew()), 16*1024));
     error = fileOpen(decompress, "/tmp/testFile.lz4", O_RDONLY, 0666);
     count = fileRead(decompress, buf, sizeof(buf), &error);

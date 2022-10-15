@@ -9,7 +9,7 @@ struct FileSource {
 };
 
 
-Error fileOpen(FileSource *this, const char *path, int mode, int perm)
+Error fileOpen(FileSource *this, char *path, int mode, int perm)
 {
     return passThroughOpen(this, path, mode, perm);
 }
