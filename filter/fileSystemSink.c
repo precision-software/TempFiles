@@ -12,7 +12,6 @@
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
     Filter header;                                                  // first in every Filter.
-    size_t blockSize;                                               // The unbuffered preferred size for I/O.
     int fd;                                                         // The file descriptor for the currrently open file.
     bool writable;                                                  // Can we write to the file?
     bool readable;                                                  // Can we read from the file?
@@ -20,75 +19,81 @@ struct FileSystemSink {
 };
 
 
-void fileSystemOpen(FileSystemSink *this, OpenRequest *req)
+Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
     // Check the mode we are opening the file in.
-    this->writable = (req->mode & O_ACCMODE) != O_RDONLY;
-    this->readable = (req->mode & O_ACCMODE) != O_WRONLY;
+    this->writable = (mode & O_ACCMODE) != O_RDONLY;
+    this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->eof = false;
 
     // Default file permission when creating a file.
-    int perm = (req->perm == 0)? 0666: req->perm;
-
-    // Assume things are OK until proven otherwise.
-    req->blockSize = this->blockSize;
-    req->error = errorOK;
+    if (perm == 0)
+        perm = 0666;
 
     // Open the file and check for errors.
-    this->fd = open(req->path, req->mode, perm);
+    this->fd = open(path, mode, perm);
     if (this->fd == -1)
-        req->error = systemError();
+        return systemError();
+
+    return errorOK;
 }
 
-void fileSystemWrite(FileSystemSink *this, WriteRequest *req)
+size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
     // Truncate large unbuffered writes to a multiple of blockSize,
     // Smaller writes go through on the premise they are at the end of the file.
-    size_t residual = req->bufSize % this->blockSize;
-    size_t size = (req->bufSize < this->blockSize)? req->bufSize: req->bufSize - residual;
-
-    // Assume things are good until proven otherwise.
-    req->error = errorOK;
+    size_t blockSize = this->header.blockSize;
+    size_t size = sizeMin(blockSize, sizeRoundDown(bufSize, blockSize));
 
     // Write the data and check for errors.
-    req->actualSize = write(this->fd, req->buf, size);
-    if (req->actualSize == -1)
-        req->error = systemError();
+    size_t actualSize = write(this->fd, buf, size);
+    if (actualSize == -1)
+        *error = systemError();
+
+    return actualSize;
 }
 
 static Error errorReadTooSmall =
         (Error){.code=errorCodeFilter, .msg="unbuffered read request was smaller than block size", .causedBy=NULL};
 
-void fileSystemRead(FileSystemSink *this, ReadRequest *req)
+size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
     // Truncate large reads to a multiple of blockSize.
-    size_t residual = req->bufSize % this->blockSize;
-    size_t size = req->bufSize - residual;
+    size_t blockSize = this->header.blockSize;
+    size_t size = sizeRoundDown(bufSize, blockSize);
 
-    // Assume everythihg is fine unless shown otherwise.
-    req->error = errorOK;
+    size_t actualSize = 0;
 
-    // CASE: we hit eof earlier, then just return eof.
-    if (this->eof)
-        req->error = errorEOF;
+    // CASE: we hit an error earlier, then just return the error
+    if (!errorIsOK(*error))
+        ;
+
+    // CASE: we had eof on last read. Return eof now.
+    else if (this->eof)
+        *error = errorEOF;
 
     // CASE: error - Unbuffered reads must be at least one block in size.
-    else if (size < this->blockSize)
-        req->error = errorReadTooSmall;
+    else if (size < blockSize)
+        *error = errorReadTooSmall;
 
     // OTHERWISE: Normal read.
     else
     {
         // Read from the file and check for system errors.
-        req->actualSize = read(this->fd, req->buf, size);
-        if (req->actualSize == -1)
-            req->error = systemError();
+        actualSize = read(this->fd, buf, size);
+        if (actualSize == -1)
+            *error = systemError();
 
-        // Also check for EOF;
-        this->eof = req->actualSize == 0;
+        // Also check for EOF for future reads.
+        this->eof = actualSize == 0;
         if (this->eof)
-            req->error = errorEOF;
+            *error = errorEOF;
     }
+
+    if (errorIsOK(*error))
+        return actualSize;
+    else
+        return 0;
 }
 
 
@@ -104,26 +109,13 @@ void fileSystemClose(FileSystemSink *this, CloseRequest *req)
     this->fd = -1;
 }
 
-// The low level file system doesn't buffer, but sends data straight to the operating system.
-void fileSystemPeek(FileSystemSink *this, PeekRequest *req)
-{
-    req->sinkBuf = NULL;
-    req->error = errorOK;
-}
-
 
 FilterInterface fileSystemInterface = (FilterInterface)
 {
-    .fnOpen = (FilterService)fileSystemOpen,
-    .fnWrite = (FilterService)fileSystemWrite,
-    .fnRead = (FilterService)fileSystemRead,
-    .fnClose = (FilterService)fileSystemClose,
-    .fnPeek = (FilterService)fileSystemPeek,
-
-    // Not implemented.
-    .fnAbort = (FilterService)passThroughAbort,
-    .fnSeek = (FilterService)passThroughSeek,
-    .fnSync = (FilterService)passThroughSync
+    .fnOpen = (FilterOpen)fileSystemOpen,
+    .fnWrite = (FilterWrite)fileSystemWrite,
+    .fnRead = (FilterRead)fileSystemRead,
+    .fnClose = (FilterClose)fileSystemClose
 };
 
 Filter *fileSystemSinkNew()
@@ -132,8 +124,10 @@ Filter *fileSystemSinkNew()
     *this = (FileSystemSink)
     {
         .fd = -1,
-        .blockSize = 16*1024,
-        .header = (Filter){.iface=&fileSystemInterface, .next=NULL}
+        .header = (Filter){
+            .iface=&fileSystemInterface,
+            .blockSize = 16*1024,
+            .next=NULL}
     };
     return (Filter *)this;
 }

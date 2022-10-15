@@ -1,0 +1,4 @@
+TODO:
+ - Change from message passing to procedure call
+ - Test with larger files
+ - checksum, encryption, file sets.

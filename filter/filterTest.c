@@ -4,6 +4,7 @@
 #include "filter/bufferFilter.h"
 #include "filter/fileSystemSink.h"
 #include "compress/lz4Compress.h"
+#include "compress/lz4Decompress.h"
 #include "filter/fileSource.h"
 
 int main() {
@@ -34,6 +35,15 @@ int main() {
     fileClose(compressed, &error);
     if (!errorIsOK(error))
         printf("The error msg: (%d) %s\n", error.code, error.msg);
+
+    FileSource *decompress = fileSourceNew(lz4DecompressFilterNew(bufferFilterNew (fileSystemSinkNew()), 16*1024));
+    error = fileOpen(decompress, "/tmp/testFile.lz4", O_RDONLY, 0666);
+    count = fileRead(decompress, buf, sizeof(buf), &error);
+    fileClose(decompress, &error);
+    if (!errorIsOK(error))
+        printf("The error msg: (%d) %s\n", error.code, error.msg);
+    buf[13] = '\0';
+    printf("Read back: %s", buf);
 
     return 0;
 }

@@ -11,47 +11,22 @@ struct FileSource {
 
 Error fileOpen(FileSource *this, const char *path, int mode, int perm)
 {
-    OpenRequest req = (OpenRequest) {.path=path, .mode=mode, .perm=perm};
-    passThroughOpen(this, &req);
-    return req.error;
+    return passThroughOpen(this, path, mode, perm);
 }
 
 size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error)
 {
-    if (!errorIsOK(*error))
-        return 0;
-
-    WriteRequest req = (WriteRequest) {.buf=buf, .bufSize=bufSize};
-    passThroughWriteAll(this, &req);
-    *error = req.error;
-
-    if (!errorIsOK(*error))
-        return 0;
-
-    return req.actualSize;
+    return passThroughWriteAll(this, buf, bufSize, error);
 }
 
 size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error)
 {
-    if (!errorIsOK(*error))
-        return 0;
-
-    ReadRequest req = (ReadRequest) {.buf=buf, .bufSize=bufSize};
-    passThroughReadAll(this, &req);
-    *error = req.error;
-
-    if (!errorIsOK(*error))
-        return 0;
-
-    return req.actualSize;
+    return passThroughReadAll(this, buf, bufSize, error);
 }
 
 void fileClose(FileSource *this, Error *error)
 {
-    CloseRequest req = (CloseRequest){};
-    passThroughClose(this, &req);
-    if (errorIsOK(*error) || errorIsEOF(*error))
-        *error = req.error;
+    return passThroughClose(this, error);
 }
 
 FileSource *

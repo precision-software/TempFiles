@@ -9,7 +9,7 @@
 #include "filter/filter.h"
 
 typedef struct Lz4DecompressFilter Lz4DecompressFilter;
-Filter *lz4DecompressFilterNew(void *next, size_t blockSize);
+Filter *lz4DecompressFilterNew(Filter *next, size_t blockSize);
 
 extern FilterInterface lz4DecompressInterface;
 

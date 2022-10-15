@@ -4,100 +4,112 @@
 #include "error.h"
 #include "passThrough.h"
 
-static const Error notInSink =
+static Error notInSink =
         (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
 /****
 * Pass Through filter which does nothing.
 */
-#define passThrough(RequestType)                                                                                                   \
-    void passThrough##RequestType(void *filter, RequestType##Request *request)                                                     \
-    {    Filter *this = filter;                                                                                                    \
-         if (this->next == NULL)                                                                                                   \
-             request->error = notInSink;                                                                                           \
-         else                                                                                                                      \
-             this->next->iface->fn##RequestType(this->next, request);                                                              \
-    }
+#define getNextFn(this, request, fn, error) \
+    Filter##request fn;\
+    do {                             \
+        this = ((Filter*)this)->next;\
+        fn = ((Filter*)this)->iface->fn##request;  \
+    } while (this != NULL && fn == NULL);          \
+    if (fn == NULL)                  \
+        error = notInSink; \
+    else (void)0
 
 // Declare pass through functions for each type of request.
-passThrough(Abort)
-passThrough(Open)
-passThrough(Read)
-passThrough(Write)
-passThrough(Seek)
-passThrough(Sync)
-passThrough(Close)
-passThrough(Peek)
+Error passThroughOpen(void *this, char *path, int mode, int perm)
+{
+    Error error = errorOK;
+    getNextFn(this, Open, fn, error);
+    if (errorIsOK(error))
+        error = fn(this, path, mode, perm);
+    return error;
+}
+
+size_t passThroughRead(void *this, Byte *buf, size_t size, Error *error)
+{
+    getNextFn(this, Read, fn, *error);
+    if (!errorIsOK(*error))
+        return 0;
+    return fn(this, buf, size, error);
+}
+
+size_t passThroughWrite(void *this, Byte *buf, size_t size, Error *error)
+{
+    getNextFn(this, Read, fn, *error);
+    if (!errorIsOK(*error))
+        return 0;
+    return fn(this, buf, size, error);
+}
+
+void passThroughClose(void *this, Error *error)
+{
+    getNextFn(this, Close, fn, *error);
+    fn(this, error);
+}
+
 
 /***********************************************************************************************************************************
 Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).
 ***********************************************************************************************************************************/
-void passThroughWriteAll(void *this, WriteRequest *req)
+size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error)
 {
     // Start out empty, but count the bytes as we write them out.
-    req->actualSize = 0;
+    size_t totalSize = 0;
 
     // Repeat until all the bytes are written.
-    WriteRequest sub = {.buf=req->buf, .bufSize=req->bufSize};
     do {
         // Issue the next write, exiting on error.
-        passThroughWrite(this, &sub);
-        if (!errorIsOK(sub.error))
+        size_t actualSize = passThroughWrite(this, buf, size, error);
+        if (!errorIsOK(*error))
             break;
 
         // Update the bytes transferred so far.
-        sub.buf += sub.actualSize;
-        sub.bufSize -= sub.actualSize;
-        req->actualSize += sub.actualSize;
+        buf += actualSize;
+        size -= actualSize;
+        totalSize += actualSize;
 
     // End "Repeat until all the bytes are written"
-    } while (sub.bufSize > 0);
+    } while (size > 0);
 
-    // If there was an error, pass it on.
-    req->error = sub.error;
+    return totalSize;
 }
 
 /***********************************************************************************************************************************
 Helper to repeatedly read from the next filter in the pipeline until all the data is read, eof, or error.
 ***********************************************************************************************************************************/
-void passThroughReadAll(void *this, ReadRequest *req)
+size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error)
 {
     // Start out empty, but count the bytes as we read them.
-    req->actualSize = 0;
+    size_t totalSize = 0;
 
     // Repeat until all the bytes are read (or EOF)
-    ReadRequest sub = {.buf=req->buf, .bufSize=req->bufSize};
     do {
         // Issue the next read, exiting on error or eof.
-        passThroughRead(this, &sub);
-        if (!errorIsOK(sub.error))
+        size_t actualSize = passThroughRead(this, buf, size, error);
+        if (!errorIsOK(*error))
             break;
 
         // Update the bytes transferred so far.
-        sub.buf += sub.actualSize;
-        sub.bufSize -= sub.actualSize;
-        req->actualSize += sub.actualSize;
+        buf += actualSize;
+        size -= actualSize;
+        totalSize += actualSize;
 
     // End "Repeat until all the bytes are read ..."
-    } while (sub.bufSize > 0);
+    } while (size > 0);
 
     // If last read had eof, but we read data earlier, then all is OK. We'll get another eof next read.
-    if (errorIsEOF(sub.error) && req->actualSize > 0)
-        req->error = errorOK;
-    else
-        req->error = sub.error;
+    if (errorIsEOF(*error) && totalSize > 0)
+        *error = errorOK;
+
+    return totalSize;
 }
 
 /***********************************************************************************************************************************
 Defines a "no-op" filter, mainly to use as a placeholder.
 ***********************************************************************************************************************************/
-FilterInterface passThroughInterface = (FilterInterface) {
-    .fnSync = (FilterService) passThroughSync,
-    .fnAbort = (FilterService) passThroughAbort,
-    .fnClose = (FilterService) passThroughClose,
-    .fnOpen = (FilterService) passThroughOpen,
-    .fnPeek = (FilterService) passThroughPeek,
-    .fnRead = (FilterService) passThroughRead,
-    .fnWrite = (FilterService) passThroughWrite,
-    .fnSeek = (FilterService) passThroughSeek
-};
+FilterInterface passThroughInterface = (FilterInterface) {0};

@@ -22,7 +22,6 @@ typedef struct OpenRequest {
     const char *path;                                               // (in) path to the file
     int mode;                                                       // (in) modeled after Posix
     int perm;                                                       // (in) modeled after Posix
-    size_t blockSize;                                               // (out) preferred block size. Last write can be smaller.
     Error error;                                                    // (out) error state, testable with errorIsOK().
 } OpenRequest;
 

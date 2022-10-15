@@ -10,7 +10,7 @@
 /***********************************************************************************************************************************
 Write out all data in the buffer, even if the buffer isn't full.
 ***********************************************************************************************************************************/
-Error bufferForceFlush(Buffer *buf, void *filter)
+Error bufferForceFlush(Buffer *buf, void *filter) // TODO: pass *error as a param, check + return.
 {
     // Assume things are good unless proven otherwise.
     Error error = errorOK;
@@ -18,24 +18,15 @@ Error bufferForceFlush(Buffer *buf, void *filter)
     // If the buffer has data to write ...
     size_t remaining = buf->writePtr - buf->readPtr;
     if (remaining > 0)
-    {
-        // Write out all the data in the buffer.
-        WriteRequest flush = (WriteRequest) {.buf=buf->readPtr, .bufSize=remaining};
-        passThroughWriteAll(filter, &flush);
+        passThroughWriteAll(filter, buf->readPtr, remaining, &error);
 
-        // Apply any errors to the write request which caused the flush.
-        error = flush.error;
-    }
-
-    // The buffer is now empty.
-    bufferReset(buf);
     return error;
 }
 
 /***********************************************************************************************************************************
 Write out data if the buffer is full.
 ***********************************************************************************************************************************/
-Error bufferFlush(Buffer *this, void *filter)
+Error bufferFlush(Buffer *this, void *filter)  // TODO pass error as a parameter ahd test.
 {
     Error error = errorOK;
 
@@ -48,7 +39,7 @@ Error bufferFlush(Buffer *this, void *filter)
 /***********************************************************************************************************************************
 Fill up an empty buffer. Do not overwrite existing data!
 ***********************************************************************************************************************************/
-Error bufferFill(Buffer *this, void *filter)
+Error bufferFill(Buffer *this, void *filter)  // TODO: pass error and test first.
 {
     // Assume all is good until proven otherwise.
     Error error = errorOK;
@@ -56,15 +47,12 @@ Error bufferFill(Buffer *this, void *filter)
     // If the buffer is empty,
     if (bufferIsEmpty(this))
     {
-        // Read in a new buffer. Request a full block, but OK if less arrives.
-        ReadRequest req = (ReadRequest) {.buf=this->writePtr, .bufSize=this->endPtr - this->writePtr};
-        passThroughRead(filter, &req);
-        if (errorIsOK(req.error))
-            this->writePtr += req.actualSize;
-
-        // If any errors, apply them to the read request which triggered this read.
-        error = req.error;
+        // Read in a new buffer. Request a full buffer, but OK if less arrives.
+        size_t actualSize = passThroughRead(filter, this->writePtr, this->endPtr - this->writePtr, &error);
+        if (errorIsOK(error))
+            this->writePtr += actualSize;
     }
+
     return error;
 }
 
@@ -87,4 +75,10 @@ bufferFree(Buffer *this)
 {
     free(this->buf);
     free(this);
+}
+
+void
+bufferResize(Buffer *this, size_t size)
+{
+    // TODO;
 }

@@ -7,19 +7,14 @@
 #include "filter.h"
 
 extern FilterInterface passThroughInterface;
-typedef Filter PassThroughFilter;
 
-void passThroughOpen(void *this, OpenRequest *req);
-void passThroughRead(void *this, ReadRequest *req);
-void passThroughWrite(void *this, WriteRequest *req);
-void passThroughSeek(void *this, SeekRequest *req);
-void passThroughSync(void *this, SyncRequest *req);
-void passThroughClose(void *this, CloseRequest *req);
-void passThroughAbort(void *this, AbortRequest *req);
-void passThroughPeek(void *this, PeekRequest *req);
+Error passThroughOpen(void *this, char *path, int mode, int perm);
+size_t passThroughRead(void *this, Byte *buf, size_t size, Error *error);
+size_t passThroughWrite(void *this, Byte *buf, size_t size, Error *error);
+void passThroughClose(void *this, Error *error);
 
 // Helper function to ensure all the data is written.
-void passThroughWriteAll(void *this, WriteRequest *req);
-void passThroughReadAll(void *this, ReadRequest *req);
+size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error);
+size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
 
 #endif //UNTITLED1_PASSTHROUGH_H
