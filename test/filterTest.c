@@ -7,6 +7,7 @@
 #include "compress/lz4/lz4Decompress.h"
 #include "file/fileSource.h"
 
+/* A very quick test program - only prints out "Hello World". Obviously more extensive tests to come. */
 int main() {
 
     FileSource *stream = fileSourceNew(bufferFilterNew( fileSystemSinkNew() ));
