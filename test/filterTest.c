@@ -3,8 +3,7 @@
 #include <sys/fcntl.h>
 #include "file/bufferFilter.h"
 #include "file/fileSystemSink.h"
-#include "compress/lz4/lz4Compress.h"
-#include "compress/lz4/lz4Decompress.h"
+#include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
 
 /* A very quick test program - only prints out "Hello World". Obviously more extensive tests to come. */
@@ -30,18 +29,17 @@ int main() {
     buf[13] = '\0';
     printf("Read back: %s", buf);
 
-    FileSource *compressed = fileSourceNew(lz4CompressFilterNew(bufferFilterNew( fileSystemSinkNew() ), 16*1024));
-    error = fileOpen(compressed, "/tmp/testFile.lz4", O_WRONLY|O_CREAT|O_TRUNC, 0666);
-    count = fileWrite(compressed, (Byte*)"Hello World!\n", 13, &error);
-    fileClose(compressed, &error);
+    FileSource *lz4 = fileSourceNew(lz4FilterNew(bufferFilterNew( fileSystemSinkNew() ), 16*1024));
+    error = fileOpen(lz4, "/tmp/testFile.lz4", O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    count = fileWrite(lz4, (Byte*)"Hello World!\n", 13, &error);
+    fileClose(lz4, &error);
     if (!errorIsOK(error))
         printf("The error msg: (%d) %s\n", error.code, error.msg);
 
     strcpy((char*)buf, "Buffer data not read in yet");
-    FileSource *decompress = fileSourceNew(lz4DecompressFilterNew(bufferFilterNew (fileSystemSinkNew()), 16*1024));
-    error = fileOpen(decompress, "/tmp/testFile.lz4", O_RDONLY, 0666);
-    count = fileRead(decompress, buf, sizeof(buf), &error);
-    fileClose(decompress, &error);
+    error = fileOpen(lz4, "/tmp/testFile.lz4", O_RDONLY, 0666);
+    count = fileRead(lz4, buf, sizeof(buf), &error);
+    fileClose(lz4, &error);
     if (!errorIsOK(error))
         printf("The error msg: (%d) %s\n", error.code, error.msg);
     buf[13] = '\0';

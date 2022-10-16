@@ -23,7 +23,7 @@ struct BufferFilter
     bool writeable;
 };
 
-Error errorCantBothReadWrite =
+static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="BufferFilter can't read and write the same stream", .causedBy=NULL};
 
 Error
