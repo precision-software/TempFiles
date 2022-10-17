@@ -1,7 +1,7 @@
 /*  */
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/bufferFilter.h"
+#include "file/bufferStream.h"
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
@@ -9,7 +9,7 @@
 /* A very quick test program - only prints out "Hello World". Obviously more extensive tests to come. */
 int main() {
 
-    FileSource *stream = fileSourceNew(bufferFilterNew( fileSystemSinkNew() ));
+    FileSource *stream = fileSourceNew(bufferStreamNew( fileSystemSinkNew() ));
 
     Error error = fileOpen(stream, "/tmp/testFile", O_WRONLY|O_CREAT|O_TRUNC, 0666);
     size_t count = fileWrite(stream, (Byte*)"Hello World!\n", 13, &error);
@@ -29,7 +29,7 @@ int main() {
     buf[13] = '\0';
     printf("Read back: %s", buf);
 
-    FileSource *lz4 = fileSourceNew(lz4FilterNew(bufferFilterNew( fileSystemSinkNew() ), 16*1024));
+    FileSource *lz4 = fileSourceNew(lz4FilterNew(bufferStreamNew( fileSystemSinkNew() ), 16*1024));
     error = fileOpen(lz4, "/tmp/testFile.lz4", O_WRONLY|O_CREAT|O_TRUNC, 0666);
     count = fileWrite(lz4, (Byte*)"Hello World!\n", 13, &error);
     fileClose(lz4, &error);

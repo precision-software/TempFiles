@@ -6,7 +6,6 @@
 #include "common/syscall.h"
 #include "common/passThrough.h"
 #include "fileSystemSink.h"
-#include "common/request.h"
 
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
