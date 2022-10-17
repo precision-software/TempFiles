@@ -15,13 +15,14 @@ typedef struct Filter {
     struct FilterInterface *iface;                                  // The set of functions for processing requests.
     size_t blockSize;                                               // The block size we expect, 1 if buffered.
     Buffer *buf;                                                    // Our internal buffer, if we want to share it.
+
+    // Cache the "next" objects.
+    struct FilterNext *nextCache;
 } Filter;
 
 /***********************************************************************************************************************************
 A set of functions a filter provides for dealing with each type of request.
 ***********************************************************************************************************************************/
-typedef void (*FilterService)(void *this, void *request);
-
 typedef Error (*FilterOpen)(void *this, char *path, int mode, int perm);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
@@ -33,5 +34,14 @@ typedef struct FilterInterface {
     FilterClose fnClose;
     FilterRead fnRead;
 } FilterInterface;
+
+typedef struct FilterNext {
+    Filter *objOpen;
+    Filter *objWrite;
+    Filter *objClose;
+    Filter *objRead;
+} FilterNext;
+
+FilterNext newFilterNext(Filter *next);
 
 #endif //UNTITLED1_FILTER_H
