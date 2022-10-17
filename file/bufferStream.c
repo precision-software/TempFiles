@@ -7,7 +7,7 @@
 #include "common/buffer.h"
 #include "common/passThrough.h"
 
-#include "bufferFilter.h"
+#include "bufferStream.h"
 
 #define palloc malloc
 
@@ -15,7 +15,7 @@
 Filter which reconciles an input of one block size with output of a different block size.
 It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
 ***********************************************************************************************************************************/
-struct BufferFilter
+struct BufferStream
 {
     Filter header;                                                  /* Common to all filters */
     Buffer *buf;                                                    /* Local buffer */
@@ -24,10 +24,10 @@ struct BufferFilter
 };
 
 static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="BufferFilter can't read and write the same stream", .causedBy=NULL};
+        (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
 
 Error
-bufferFilterOpen(BufferFilter *this, char *path, int mode, int perm)
+bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 {
     // We support I/O in only one direction per open.
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
@@ -40,7 +40,7 @@ bufferFilterOpen(BufferFilter *this, char *path, int mode, int perm)
 }
 
 
-size_t bufferFilterWrite(BufferFilter *this, Byte *buf, size_t bufSize, Error* error)
+size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -59,7 +59,7 @@ size_t bufferFilterWrite(BufferFilter *this, Byte *buf, size_t bufSize, Error* e
     return actualSize;
 }
 
-size_t bufferFilterRead(BufferFilter *this, Byte *buf, size_t bufSize, Error *error)
+size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -81,7 +81,7 @@ size_t bufferFilterRead(BufferFilter *this, Byte *buf, size_t bufSize, Error *er
 }
 
 
-void bufferFilterClose(BufferFilter *this, Error *error)
+void bufferStreamClose(BufferStream *this, Error *error)
 {
     // Flush our buffers.
     Error flushError = bufferForceFlush(this->buf, this);
@@ -94,26 +94,26 @@ void bufferFilterClose(BufferFilter *this, Error *error)
         *error = flushError;
 }
 
-FilterInterface bufferFilterInterface = (FilterInterface)
+FilterInterface bufferStreamInterface = (FilterInterface)
 {
-    .fnOpen = (FilterOpen)bufferFilterOpen,
-    .fnWrite = (FilterWrite)bufferFilterWrite,
-    .fnClose = (FilterClose)bufferFilterClose,
-    .fnRead = (FilterRead)bufferFilterRead,
+    .fnOpen = (FilterOpen)bufferStreamOpen,
+    .fnWrite = (FilterWrite)bufferStreamWrite,
+    .fnClose = (FilterClose)bufferStreamClose,
+    .fnRead = (FilterRead)bufferStreamRead,
 } ;
 
 /***********************************************************************************************************************************
 Create a new buffer filter object.
 It allocates an output buffer which matches the block size of the next filter in the pipeline.
 ***********************************************************************************************************************************/
-Filter *bufferFilterNew(Filter *next)
+Filter *bufferStreamNew(Filter *next)
 {
-    BufferFilter *this = palloc(sizeof(BufferFilter));
-    *this = (BufferFilter) {
+    BufferStream *this = palloc(sizeof(BufferStream));
+    *this = (BufferStream) {
         .header = (Filter){
             .next = next,
             .blockSize = 1,
-            .iface = &bufferFilterInterface
+            .iface = &bufferStreamInterface
         },
 
         // Allocate a buffer to hold multiple blocks of our successor.

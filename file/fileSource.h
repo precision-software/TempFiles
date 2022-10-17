@@ -8,7 +8,6 @@
 #include "common/error.h"
 #include "common/filter.h"
 #include "common/passThrough.h"
-#include "common/request.h"
 
 typedef struct FileSource FileSource;
 
