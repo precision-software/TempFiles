@@ -119,6 +119,6 @@ Filter *bufferFilterNew(Filter *next)
         // Allocate a buffer to hold multiple blocks of our successor.
         .buf = bufferNew(sizeRoundUp(16 * 1024, next->blockSize))
     };
-
+    setNext(this);
     return (Filter *)this;
 }

@@ -47,7 +47,7 @@ Filter *lz4FilterNew(Filter *next, size_t blockSize)
         .blockSize = blockSize,
         .buf = bufferNew(bufferSize)
     };
-
+    setNext(this);
     return (Filter *)this;
 }
 

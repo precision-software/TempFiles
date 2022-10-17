@@ -45,6 +45,6 @@ typedef struct FilterNext {
     Filter *objRead;
 } FilterNext;
 
-FilterNext newFilterNext(Filter *next);
+void setNext(void *next);
 
 #endif //UNTITLED1_FILTER_H

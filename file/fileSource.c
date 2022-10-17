@@ -36,6 +36,6 @@ fileSourceNew(Filter *next)
     *this = (FileSource) {
         .header = (Filter){.next=next, .iface=&passThroughInterface}
     };
-
+    setNext(this);
     return this;
 }

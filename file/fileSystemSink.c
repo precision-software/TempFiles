@@ -89,5 +89,6 @@ Filter *fileSystemSinkNew()
             .blockSize = 16*1024,
             .next=NULL}
     };
+    setNext(this);
     return (Filter *)this;
 }
