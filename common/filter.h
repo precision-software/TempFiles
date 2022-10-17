@@ -16,8 +16,11 @@ typedef struct Filter {
     size_t blockSize;                                               // The block size we expect, 1 if buffered.
     Buffer *buf;                                                    // Our internal buffer, if we want to share it.
 
-    // Cache the "next" objects.
-    struct FilterNext *nextCache;
+    // Cache the "next" objects for each operation.
+    struct Filter *nextOpen;
+    struct Filter *nextRead;
+    struct Filter *nextWrite;
+    struct Filter *nextClose;
 } Filter;
 
 /***********************************************************************************************************************************
