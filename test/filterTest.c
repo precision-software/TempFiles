@@ -5,6 +5,7 @@
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
+#include "fileSet/fileSet.h"
 
 /* A very quick test program - only prints out "Hello World". Obviously more extensive tests to come. */
 int main() {
@@ -45,6 +46,28 @@ int main() {
     buf[13] = '\0';
     printf("Read back: %s", buf);
 
-    return 0;
+    FileSource *set =
+        fileSourceNew(
+            bufferStreamNew(
+                    fileSetFilterNew(
+                            fileSystemSinkNew(),
+                            1024*1024,
+                            formatPath, "%s_%06d.seg")));
+
+    error = fileOpen(set, "/tmp/testFile", O_WRONLY|O_CREAT|O_TRUNC, 0666);
+    count = fileWrite(set, (Byte*)"Hello World!\n", 13, &error);
+    fileClose(set, &error);
+    if (!errorIsOK(error))
+        printf("The error msg: (%d) %s\n", error.code, error.msg);
+
+    strcpy((char*)buf, "Buffer data not read in yet");
+    error = fileOpen(set, "/tmp/testFile", O_RDONLY, 0666);
+    count = fileRead(set, buf, sizeof(buf), &error);
+    fileClose(set, &error);
+    if (!errorIsOK(error))
+        printf("The error msg: (%d) %s\n", error.code, error.msg);
+    buf[13] = '\0';
+    printf("Read back: %s", buf);
+
 }
 // TODO: Make it OK to clase an already closed pipeline.

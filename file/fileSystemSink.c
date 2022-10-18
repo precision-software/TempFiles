@@ -16,6 +16,10 @@ struct FileSystemSink {
     bool eof;                                                       // Has the currently open file read past eof?
 };
 
+static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
+static Error errorCantRead = (Error){.code=errorCodeFilter, .msg="Reading from file opened as writeonly"};
+static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered read was smaller than block size"};
+
 Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
     // Check the mode we are opening the file in.
@@ -36,6 +40,10 @@ Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 
 size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
+    // Check for errors.
+    if (errorIsOK(*error) && !this->writable)
+        *error = errorCantWrite;
+
     // Truncate large unbuffered writes to a multiple of blockSize,
     // Smaller writes go through on the premise they are at the end of the file.
     size_t blockSize = this->header.blockSize;
@@ -45,17 +53,15 @@ size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *e
     return sys_write(this->fd, buf, size, error);
 }
 
-static Error errorReadTooSmall =
-        (Error){.code=errorCodeFilter, .msg="unbuffered read request was smaller than block size", .causedBy=NULL};
-
 size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
     // Truncate large reads to a multiple of blockSize.
     size_t blockSize = this->header.blockSize;
     size_t size = sizeRoundDown(bufSize, blockSize);
 
-    // Check for errors: existing, previous read had EOF, read must be at least one block in size.
+    // Check for errors.
     if (isError(*error))                 ;
+    else if (!this->readable)            *error = errorCantRead;
     else if (this->eof)                  *error = errorEOF;
     else if (size < blockSize)           *error = errorReadTooSmall;
 
@@ -69,12 +75,24 @@ void fileSystemClose(FileSystemSink *this, Error *error)
     this->fd = -1;
 }
 
+void fileSystemSync(FileSystemSink *this, Error *error)
+{
+    // Error if file was readonly.
+    if (errorIsOK(*error) && !this->writable)
+        *error = errorCantWrite;
+
+    // Go sync it.
+    if (this->writable)
+        sys_datasync(this->fd, error);
+}
+
 FilterInterface fileSystemInterface = (FilterInterface)
 {
     .fnOpen = (FilterOpen)fileSystemOpen,
     .fnWrite = (FilterWrite)fileSystemWrite,
     .fnRead = (FilterRead)fileSystemRead,
-    .fnClose = (FilterClose)fileSystemClose
+    .fnClose = (FilterClose)fileSystemClose,
+    .fnSync = (FilterSync)fileSystemSync
 };
 
 Filter *fileSystemSinkNew()

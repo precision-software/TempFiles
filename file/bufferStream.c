@@ -94,12 +94,24 @@ void bufferStreamClose(BufferStream *this, Error *error)
         *error = flushError;
 }
 
+void bufferStreamSync(BufferStream *this, Error *error)
+{
+    if (isError(*error)) return;
+
+    // Flush our buffers.
+    *error = bufferForceFlush(this->buf, this);
+
+    // Pass on the sync request
+    passThroughSync(this, error);
+}
+
 FilterInterface bufferStreamInterface = (FilterInterface)
 {
     .fnOpen = (FilterOpen)bufferStreamOpen,
     .fnWrite = (FilterWrite)bufferStreamWrite,
     .fnClose = (FilterClose)bufferStreamClose,
     .fnRead = (FilterRead)bufferStreamRead,
+    .fnSync = (FilterSync)bufferStreamSync,
 } ;
 
 /***********************************************************************************************************************************

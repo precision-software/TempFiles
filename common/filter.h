@@ -26,12 +26,16 @@ typedef Error (*FilterOpen)(void *this, char *path, int mode, int perm);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
+typedef void (*FilterSync)(void *this, Error *error);
+typedef void (*FilterAbort)(void *this, Error *error);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
     FilterWrite fnWrite;
     FilterClose fnClose;
     FilterRead fnRead;
+    FilterSync fnSync;
+    FilterAbort fnAbort;
 } FilterInterface;
 
 #endif //UNTITLED1_FILTER_H

@@ -51,6 +51,12 @@ void passThroughClose(void *this, Error *error)
     return next->iface->fnClose(next, error);
 }
 
+void passThroughSync(void *this, Error *error)
+{
+    passThroughGetNext(Close, *error, (void)0);
+    return next->iface->fnSync(next, error);
+}
+
 
 /***********************************************************************************************************************************
 Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).

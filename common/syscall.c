@@ -61,3 +61,10 @@ void sys_close(int fd, Error *error)
     if (fd != -1 && close(fd) == -1 && errorIsOK(*error))
         *error = systemError();
 }
+
+#define fdatasync(fd) fsync(fd)
+void sys_datasync(int fd, Error *error)
+{
+    if (fdatasync(fd) == -1 && errorIsOK(*error))
+        *error = systemError();
+}
