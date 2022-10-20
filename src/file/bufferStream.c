@@ -54,7 +54,7 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
     size_t actualSize = writeToBuffer(this->buf, buf, bufSize);
 
     // Flush the buffer if full, attributing any errors to our write request.
-    *error = bufferFlush(this->buf, this);
+    bufferFlush(this->buf, this, error);
 
     return actualSize;
 }
@@ -70,10 +70,10 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
         return passThroughRead(this, buf, bufSize, error);
 
     // If buffer is empty, fetch some more data, attributing errors to our read request.
-    *error = bufferFill(this->buf, this);
+    bufferFill(this->buf, this, error);
 
     // Check for error while filling buffer.
-    if (!errorIsOK(*error))
+    if (isError(*error))
         return 0;
 
     // Copy data from buffer since all is OK;
@@ -84,22 +84,16 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
 void bufferStreamClose(BufferStream *this, Error *error)
 {
     // Flush our buffers.
-    Error flushError = bufferForceFlush(this->buf, this);
+    bufferForceFlush(this->buf, this, error);
 
-    // Pass on the close request
-    passThroughClose(this, &flushError);
-
-    // but give priority to any previous errors.
-    if (errorIsOK(*error))
-        *error = flushError;
+    // Pass on the close request.,
+    passThroughClose(this, error);
 }
 
 void bufferStreamSync(BufferStream *this, Error *error)
 {
-    if (isError(*error)) return;
-
     // Flush our buffers.
-    *error = bufferForceFlush(this->buf, this);
+    bufferForceFlush(this->buf, this, error);
 
     // Pass on the sync request
     passThroughSync(this, error);

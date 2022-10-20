@@ -27,6 +27,7 @@ struct ConversionFilter
     size_t blockSize;   // uncompressed block size
     size_t bufferSize;  // big enough to hold max compressed block size
     Buffer *buf;        // our buffer.
+
     void *converterConfig;
     Converter *(*newToConverter)(void *config, Error *error);
     Converter *(*newFromConverter)(void *config, Error *error);
@@ -57,7 +58,7 @@ Error conversionFilterOpen(ConversionFilter *this, char *path, int mode, int per
 size_t conversionFilterRead(ConversionFilter *this, Byte *buf, size_t size, Error *error)
 {
     size_t outSize = 0, inSize = 0;
-    bufferFill(this->buf, this);
+    bufferFill(this->buf, this, error);
 
     converterConvert(this->converter, this->buf->writePtr, &inSize, buf, &outSize, error);
     this->buf->readPtr+=outSize; if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
@@ -76,10 +77,10 @@ size_t conversionFilterWrite(ConversionFilter *this, Byte *buf, size_t size, Err
 void conversionFilterClose(ConversionFilter *this, Error *error)
 {
     if (isError(*error)) return;
-    *error = bufferForceFlush(this->buf, this);  // TODO: only want one final, partial write??  Use error as a param.
+    bufferForceFlush(this->buf, this, error);  // TODO: only want one final, partial write??  Use error as a param.
     converterEndFrame(this->converter, error);
     if (isError(*error)) return;
-    bufferForceFlush(this->buf, this);
+    bufferForceFlush(this->buf, this, error);
 
     converterFree(this->converter, error);
     this->converter = NULL;
@@ -88,7 +89,7 @@ void conversionFilterClose(ConversionFilter *this, Error *error)
 }
 
 
-FilterInterface genericInterface = {
+FilterInterface conversionInterface = {
         .fnOpen = (FilterOpen)conversionFilterOpen,
         .fnRead = (FilterRead)conversionFilterRead,
         .fnWrite = (FilterWrite)conversionFilterWrite,
@@ -102,7 +103,7 @@ Filter *conversionFilterNew(Filter *next, size_t blockSize, Converter *(*newTo)(
     *this = (ConversionFilter) {
             .header = (Filter) {
                     .blockSize = blockSize,
-                    .iface = &genericInterface,
+                    .iface = &conversionInterface,
                     .next = next,
             },
             .blockSize = blockSize,

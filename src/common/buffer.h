@@ -86,8 +86,8 @@ writeByte(Buffer *this, Byte byte)
 
 Buffer *bufferNew(size_t size);
 void bufferFree(Buffer *this);
-Error bufferForceFlush(Buffer *this, void *filter);
-Error bufferFlush(Buffer *this, void *filter);
-Error bufferFill(Buffer *this, void *filter);
+void bufferForceFlush(Buffer *this, void *filter, Error *error);
+void bufferFlush(Buffer *this, void *filter, Error *error);
+void bufferFill(Buffer *this, void *filter, Error *error);
 
 #endif //FILTER_BUFFER_H

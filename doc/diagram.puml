@@ -4,26 +4,26 @@
  fileRead()-->|           |     |               |      |               |-->read()
 fileWrite()-->|File Source|<--->|Buffered Stream|<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +---------------+-->close()                                                         -->fsync()
+fileClose()-->+-----------+     +---------------+      +---------------+-->close()
 @endditaa
 
 @startditaa
                                                With Compression
  fileOpen()-->+-----------+bytes+---------------+bytes+---------------+blocks+---------------+-->open()
  fileRead()-->|           |     |               |     |               |      |               |-->read()
-fileWrite()-->|File Source|<--->|LZ4 Compression|<--->|Buffered Stream|----->|Filesystem Sink|-->write()
+fileWrite()-->|File Source|<--->|Buffered Stream|<--->|LZ4 Compression|<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |     |               |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+     +---------------+      +---------------+-->close()                                                         -->fsync()
+fileClose()-->+-----------+     +---------------+     +---------------+      +---------------+-->close()
 @endditaa
 
 
 @startditaa
                                                With Encryption
- fileOpen()-->+-----------+bytes+----------------+blocks+--------------+blocks+---------------+-->open()
- fileRead()-->|           |     |                |      |              |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<----->|AES Encryption|----->|Filesystem Sink|-->write()
- fileSync()-->|           |     |                |      |              |      |               |-->fsync()
-fileClose()-->+-----------+     +----------------+      +--------------+      +---------------+-->close()                                                         -->fsync()
+ fileOpen()-->+-----------+bytes+---------------+blocks+--------------+blocks+---------------+-->open()
+ fileRead()-->|           |     |               |      |              |      |               |-->read()
+fileWrite()-->|File Source|<--->|Buffered Stream|<---->|AES Encryption|<---->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |               |      |              |      |               |-->fsync()
+fileClose()-->+-----------+     +---------------+      +--------------+      +---------------+-->close()
 @endditaa
 
 
@@ -33,7 +33,7 @@ fileClose()-->+-----------+     +----------------+      +--------------+      +-
  fileRead()-->|           |     |               |      |          +--+  |      |               |-->read()
 fileWrite()-->|File Source|<--->|Buffered Stream|<---->|File Split|  :  :<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |      |          +--+  |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +----------+  +--/      +---------------+-->close()                                                         -->fsync()
+fileClose()-->+-----------+     +---------------+      +----------+  +--/      +---------------+-->close()
                                                                   Multiple
                                                                     Files
 @endditaa

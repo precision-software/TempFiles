@@ -28,7 +28,7 @@ lz4DecompressRead(Lz4Filter *this, Byte *decompressedBytes, size_t decompressedS
     if (isError(*error))  return 0;
 
     // Get more data if the buffer is empty.
-    *error = bufferFill(this->buf, this);
+    bufferFill(this->buf, this, error);
     if (isError(*error))  return 0;
 
     // We are taking compressed bytes from our buffer and returning decompressed bytes to our caller.

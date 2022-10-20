@@ -30,7 +30,9 @@ lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm)
 
     // Flush the frame header, so we start with an empty buffer.
     this->buf->writePtr += size;
-    return bufferForceFlush(this->buf, this);
+    bufferForceFlush(this->buf, this, &error);
+
+    return error;
 }
 
 // Disable buffering in the lz4 compression library.
@@ -40,7 +42,7 @@ size_t
 lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSize, Error *error)
 {
     assert(bufferIsEmpty(this->buf));
-    if (!errorIsOK(*error))
+    if (isError(*error))
         return 0;
 
     // Convert the uncompressed bytes and store them in our buffer.
@@ -56,7 +58,9 @@ lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSi
 
     // Add it to buf and flush it out to the next filter.
     this->buf->writePtr += compressedSize;
-    *error = bufferForceFlush(this->buf, this);
+    bufferForceFlush(this->buf, this, error);
+    if (isError(*error))
+        return 0;
 
     // Return the number of uncompressed bytes we wrote. Since there were no errors, we assume they were all written.
     return uncompressedSize;
@@ -66,28 +70,22 @@ lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSi
 void
 lz4CompressClose(Lz4Filter *this, Error *error)
 {
-    Error closeError = errorOK;
-
     // Generate a frame footer.
     size_t size = LZ4F_compressEnd(this->cctx, this->buf->buf, this->bufferSize, &compressOptions);
     if (LZ4F_isError(size))
     {
-        closeError = errorLz4FailedToCompress;
-        size = 0;
+        *error = errorLz4FailedToCompress;
+        return;
     }
 
     // Flush the footer.
     this->buf->writePtr += size;
-    Error flushError = bufferForceFlush(this->buf, this);  // TODO: pass error as a parameter
+    bufferForceFlush(this->buf, this, error);
 
     // Pass the "close" down the line so stream is closed properly.
-    passThroughClose(this, &closeError);
+    passThroughClose(this, error);
 
     // release the compression context
     LZ4F_freeCompressionContext(this->cctx);
     this->cctx = NULL;
-
-    // If errors occurred, give the original error priority over the close error.
-    if (errorIsOK(*error))
-         *error = flushError;
 }

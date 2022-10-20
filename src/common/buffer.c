@@ -9,52 +9,38 @@
 /***********************************************************************************************************************************
 Write out all data in the buffer, even if the buffer isn't full.
 ***********************************************************************************************************************************/
-Error bufferForceFlush(Buffer *buf, void *filter) // TODO: pass *error as a param, check + return.
+void bufferForceFlush(Buffer *buf, void *filter, Error *error) // TODO: pass *error as a param, check + return.
 {
-    // Assume things are good unless proven otherwise.
-    Error error = errorOK;
-
     // If the buffer has data to write ...
     size_t remaining = buf->writePtr - buf->readPtr;
     if (remaining > 0)
-        passThroughWriteAll(filter, buf->readPtr, remaining, &error);
+        passThroughWriteAll(filter, buf->readPtr, remaining, error);
 
     bufferReset(buf);
-
-    return error;
 }
 
 /***********************************************************************************************************************************
 Write out data if the buffer is full.
 ***********************************************************************************************************************************/
-Error bufferFlush(Buffer *this, void *filter)  // TODO pass error as a parameter ahd test.
+void bufferFlush(Buffer *this, void *filter, Error *error)  // TODO pass error as a parameter ahd test.
 {
-    Error error = errorOK;
-
     if (bufferIsFull(this))
-        error = bufferForceFlush(this, filter);
-
-    return error;
+        bufferForceFlush(this, filter, error);
 }
 
 /***********************************************************************************************************************************
 Fill up an empty buffer. Do not overwrite existing data!
 ***********************************************************************************************************************************/
-Error bufferFill(Buffer *this, void *filter)  // TODO: pass error and test first.
+void bufferFill(Buffer *this, void *filter, Error *error)  // TODO: pass error and test first.
 {
-    // Assume all is good until proven otherwise.
-    Error error = errorOK;
-
     // If the buffer is empty,
     if (bufferIsEmpty(this))
     {
         // Read in a new buffer. Request a full buffer, but OK if less arrives.
-        size_t actualSize = passThroughRead(filter, this->writePtr, this->endPtr - this->writePtr, &error);
-        if (errorIsOK(error))
+        size_t actualSize = passThroughRead(filter, this->writePtr, this->endPtr - this->writePtr, error);
+        if (errorIsOK(*error))
             this->writePtr += actualSize;
     }
-
-    return error;
 }
 
 Buffer *
