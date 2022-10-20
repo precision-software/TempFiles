@@ -2,10 +2,12 @@
 // Created by John Morris on 10/19/22.
 //
 
-#ifndef FILTER_UNITTEST_H
-#define FILTER_UNITTEST_H
+#ifndef FILTER_UNITTESTINTERNAL_H
+#define FILTER_UNITTESTINTERNAL_H
 
 #include <stdio.h>
+
+#define TEST_DIR "/tmp/pgtest/"
 
 #define BEGIN do {
 #define END   } while (0)
@@ -56,14 +58,7 @@ static const char *expectFmt = "Expected '%s' but got '%s'";
             PG_ASSERT_MSG("'" #expr "' is false");                                                            \
     END
 
-void testMain(void);
-
-int main()
-{
-    testMain();
-}
-
 static void beginTestGroup(char *name) {fprintf(stderr, "Begin Test Group %s\n", name);}
 static void beginTest(char *name) {fprintf(stderr, "Begin Test %s\n", name);}
 
-#endif //FILTER_UNITTEST_H
+#endif //FILTER_UNITTESTINTERNAL_H

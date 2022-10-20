@@ -9,7 +9,7 @@ add_executable(filterTest test/filterTest.c src/common/filter.c src/common/filte
         src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
         src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c src/compress/lz4/lz4Compress.c
         src/compress/lz4/lz4Decompress.c src/common/syscall.c src/common/syscall.h src/compress/lz4/lz4.c
-        src/compress/lz4/lz4.h src/compress/lz4/lz4_internal.h src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h src/common/conversionFilter.c src/common/conversionFilter.h test/unitTest.h)
+        src/compress/lz4/lz4.h src/compress/lz4/lz4_internal.h src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h src/common/conversionFilter.c src/common/conversionFilter.h test/framework/unitTestInternal.h test/framework/streamTest.c test/framework/streamTest.h test/framework/unitTest.h)
 
 target_link_directories(filterTest PUBLIC /opt/local/lib)
 target_link_libraries(filterTest PUBLIC lz4)
