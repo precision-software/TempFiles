@@ -26,6 +26,8 @@ size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error)
 
 void fileClose(FileSource *this, Error *error)
 {
+    if (errorIsEOF(*error))
+        *error = errorOK;
     return passThroughClose(this, error);
 }
 

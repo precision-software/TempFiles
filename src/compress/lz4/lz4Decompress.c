@@ -3,7 +3,7 @@
 //
 
 #include <lz4frame.h>
-#include "compress/lz4/lz4_internal.h"
+#include "lz4_internal.h"
 #include "common/buffer.h"
 #include "common/passThrough.h"
 #include "common/filter.h"

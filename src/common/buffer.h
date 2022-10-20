@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <memory.h>
 #include <stdbool.h>
-#include "common/error.h"
+#include "error.h"
 
 // A generic data buffer.
 typedef struct Buffer

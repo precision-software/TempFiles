@@ -1,0 +1,39 @@
+@startditaa
+                               fread/fwrite replacement
+ fileOpen()-->+-----------+bytes+---------------+blocks+---------------+-->open()
+ fileRead()-->|           |     |               |      |               |-->read()
+fileWrite()-->|File Source|<--->|Buffered Stream|<---->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |               |      |               |-->fsync()
+fileClose()-->+-----------+     +---------------+      +---------------+-->close()                                                         -->fsync()
+@endditaa
+
+@startditaa
+                                               With Compression
+ fileOpen()-->+-----------+bytes+---------------+bytes+---------------+blocks+---------------+-->open()
+ fileRead()-->|           |     |               |     |               |      |               |-->read()
+fileWrite()-->|File Source|<--->|LZ4 Compression|<--->|Buffered Stream|----->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |               |     |               |      |               |-->fsync()
+fileClose()-->+-----------+     +---------------+     +---------------+      +---------------+-->close()                                                         -->fsync()
+@endditaa
+
+
+@startditaa
+                                               With Encryption
+ fileOpen()-->+-----------+bytes+----------------+blocks+--------------+blocks+---------------+-->open()
+ fileRead()-->|           |     |                |      |              |      |               |-->read()
+fileWrite()-->|File Source|<--->|Buffered Stream|<----->|AES Encryption|----->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |                |      |              |      |               |-->fsync()
+fileClose()-->+-----------+     +----------------+      +--------------+      +---------------+-->close()                                                         -->fsync()
+@endditaa
+
+
+@startditaa
+                                     Split a stream into multiple files.
+ fileOpen()-->+-----------+bytes+---------------+blocks+----------+  +--\blocks+---------------+-->open()
+ fileRead()-->|           |     |               |      |          +--+  |      |               |-->read()
+fileWrite()-->|File Source|<--->|Buffered Stream|<---->|File Split|  :  :<---->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |               |      |          +--+  |      |               |-->fsync()
+fileClose()-->+-----------+     +---------------+      +----------+  +--/      +---------------+-->close()                                                         -->fsync()
+                                                                  Multiple
+                                                                    Files
+@endditaa

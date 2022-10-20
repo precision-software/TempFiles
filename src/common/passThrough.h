@@ -4,7 +4,7 @@
 
 #ifndef UNTITLED1_PASSTHROUGH_H
 #define UNTITLED1_PASSTHROUGH_H
-#include "common/filter.h"
+#include "filter.h"
 
 extern FilterInterface passThroughInterface;
 

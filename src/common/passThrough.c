@@ -1,7 +1,7 @@
 //
 // Created by John Morris on 10/10/22.
 //
-#include "common/error.h"
+#include "error.h"
 #include "assert.h"
 #include "passThrough.h"
 

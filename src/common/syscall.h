@@ -6,7 +6,7 @@
 #define FILTER_SYSCALL_H
 
 #include <stddef.h>
-#include "common/error.h"
+#include "error.h"
 
 int sys_open(char *path, int oflag, int perm, Error *error);
 size_t sys_read(int fd, Byte *buf, size_t size, Error *error);

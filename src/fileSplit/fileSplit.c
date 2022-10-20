@@ -2,12 +2,12 @@
 // Created by John Morris on 10/16/22.
 //
 #include "common/passThrough.h"
-#include "fileSet/fileSet.h"
+#include "fileSplit.h"
 
-static void closeCurrentSegment(FileSetFilter *this, Error *error);
-static void openCurrentSegment(FileSetFilter *this, Error *error);
+static void closeCurrentSegment(FileSplitFilter *this, Error *error);
+static void openCurrentSegment(FileSplitFilter *this, Error *error);
 
-struct FileSetFilter
+struct FileSplitFilter
 {
     Filter header;
     size_t segmentSize;
@@ -21,7 +21,7 @@ struct FileSetFilter
 
 Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
 
-Error fileSetOpen(FileSetFilter *this, char *name, int mode, int perm)
+Error fileSplitOpen(FileSplitFilter *this, char *name, int mode, int perm)
 {
     this->mode = mode;
     this->perm = perm;
@@ -29,7 +29,7 @@ Error fileSetOpen(FileSetFilter *this, char *name, int mode, int perm)
         return errorPathTooLong;
     strcpy(this->name, name);
 
-    // Position at the beginning of the first segment.
+    // Position at the beginning of the first segment, creating it if writing.
     this->position = 0;
     Error error = errorOK;
     openCurrentSegment(this, &error);
@@ -37,58 +37,60 @@ Error fileSetOpen(FileSetFilter *this, char *name, int mode, int perm)
     return error;
 }
 
-size_t fileSetRead(FileSetFilter *this, Byte *buf, size_t size, Error *error)
+size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error)
 {
     if (isError(*error)) return 0;
 
-    // If starting a new segment, then open the new segment.
-    size_t start = this->position % this->segmentSize;
-    if (start == 0)
-        openCurrentSegment(this, error);
-
     // If crossing segment boundary, then truncate to the end of segment.
+    size_t start = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
     // Read the possibly truncated buffer.
     size_t actual = passThroughRead(this, buf, truncSize, error);
     this->position += actual;
 
+    // If we just finished reading an entire segment, advance to the next segment.
+    //    Note we always have a partial segment at the end of the sequence, so we aren't at the end yet.
+    if (start + actual == this->segmentSize)
+        openCurrentSegment(this, error);
+
     return actual;
 }
 
-size_t fileSetWrite(FileSetFilter *this, Byte *buf, size_t size, Error *error)
+size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *error)
 {
     if (isError(*error)) return 0;
 
-    // If starting a new segment, then open the new segment.
-    size_t start = this->position % this->segmentSize;
-    if (start == 0)
-        openCurrentSegment(this, error);
-
     // If crossing segment boundary, then truncate to the end of segment.
+    size_t start = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
     // Write the possibly truncated buffer.
     size_t actual = passThroughWrite(this, buf, truncSize, error);
     this->position += actual;
 
+    // If we have filled the current segment, then open up the next segment.
+    //  Note we must always end the sequence with a partial segment, even if it is zero length.
+    if (start + actual == this->segmentSize)
+        openCurrentSegment(this, error);
+
     return actual;
 }
 
-void fileSetClose(FileSetFilter *this, Error *error)
+void fileSplitClose(FileSplitFilter *this, Error *error)
 {
     closeCurrentSegment(this, error);
 }
 
 
-static void closeCurrentSegment(FileSetFilter *this, Error *error)
+static void closeCurrentSegment(FileSplitFilter *this, Error *error)
 {
     if (this->position > 0)
         passThroughClose(this, error);
 
 }
 
-static void openCurrentSegment(FileSetFilter *this, Error *error)
+static void openCurrentSegment(FileSplitFilter *this, Error *error)
 {
     // Start by closing the current segment, of it was opened.
     closeCurrentSegment(this, error);
@@ -105,21 +107,21 @@ static void openCurrentSegment(FileSetFilter *this, Error *error)
     *error = passThroughOpen(this, path, this->mode, this->perm);
 }
 
-static FilterInterface fileSetInterface = {
-    .fnClose = (FilterClose)fileSetClose,
-    .fnOpen = (FilterOpen)fileSetOpen,
-    .fnRead = (FilterRead)fileSetRead,
-    .fnWrite = (FilterWrite)fileSetWrite
+static FilterInterface fileSplitInterface = {
+    .fnClose = (FilterClose)fileSplitClose,
+    .fnOpen = (FilterOpen)fileSplitOpen,
+    .fnRead = (FilterRead)fileSplitRead,
+    .fnWrite = (FilterWrite)fileSplitWrite
 };
 
-Filter *fileSetFilterNew(Filter *next, size_t segmentSize, PathGetter getPath, void *pathData)
+Filter *fileSplitFilterNew(Filter *next, size_t segmentSize, PathGetter getPath, void *pathData)
 {
-    FileSetFilter *this = malloc(sizeof(FileSetFilter));
-    *this = (FileSetFilter) {
+    FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
+    *this = (FileSplitFilter) {
         .header = (Filter) {
             .next = next,
             .blockSize = next->blockSize,
-            .iface = &fileSetInterface
+            .iface = &fileSplitInterface
         },
         .getPath = getPath,
         .pathData = pathData,

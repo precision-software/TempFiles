@@ -2,7 +2,7 @@
 // Created by John Morris on 10/13/22.
 //
 #include <lz4frame.h>
-#include "compress/lz4/lz4_internal.h"
+#include "lz4_internal.h"
 
 Error
 lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm)
@@ -34,7 +34,7 @@ lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm)
 }
 
 // Disable buffering in the lz4 compression library.
-static const LZ4F_compressOptions_t compressOptions = {.stableSrc=1};
+static const LZ4F_compressOptions_t compressOptions = {}; //{.stableSrc=1};
 
 size_t
 lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSize, Error *error)

@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "common/buffer.h"
+#include "buffer.h"
 
 /***********************************************************************************************************************************
 The basic filter which serves as a header for all other filter types.

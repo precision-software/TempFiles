@@ -8,7 +8,7 @@
 #include "common/buffer.h"
 #include "common/passThrough.h"
 #include "common/filter.h"
-#include "compress/lz4/lz4.h"
+#include "lz4.h"
 
 
 struct Lz4Filter

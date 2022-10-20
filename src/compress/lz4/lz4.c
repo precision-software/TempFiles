@@ -3,7 +3,7 @@
 //
 #include <lz4frame.h>
 #include <sys/fcntl.h>
-#include "compress/lz4/lz4_internal.h"
+#include "lz4_internal.h"
 
 Error lz4FilterOpen(Lz4Filter *this, char *path, int mode, int perm)
 {
@@ -33,7 +33,7 @@ Filter *lz4FilterNew(Filter *next, size_t blockSize)
 {
     // Set up our encryption preferences. In particular, minimize buffering during compression.
     LZ4F_preferences_t preferences = LZ4F_INIT_PREFERENCES;
-    preferences.autoFlush = 1;
+    //preferences.autoFlush = 1;
     size_t bufferSize = LZ4F_compressBound(blockSize, &preferences);
 
     Lz4Filter *this = malloc(sizeof(Lz4Filter));
