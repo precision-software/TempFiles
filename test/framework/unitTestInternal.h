@@ -58,7 +58,7 @@ static const char *expectFmt = "Expected '%s' but got '%s'";
             PG_ASSERT_MSG("'" #expr "' is false");                                                            \
     END
 
-static void beginTestGroup(char *name) {fprintf(stderr, "Begin Test Group %s\n", name);}
-static void beginTest(char *name) {fprintf(stderr, "Begin Test %s\n", name);}
+static void beginTestGroup(char *name) {fprintf(stderr, "Begin Testgroup %s\n", name);}
+static void beginTest(char *name) {fprintf(stderr, "    Test %s\n", name);}
 
 #endif //FILTER_UNITTESTINTERNAL_H

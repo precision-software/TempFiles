@@ -24,12 +24,12 @@ lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm)
 
     // Generate the frame header.
     assert(bufferIsEmpty(this->buf));
-    size = LZ4F_compressBegin(this->cctx, this->buf->buf, bufferSize(this->buf), &this->preferences);
+    size = LZ4F_compressBegin(this->cctx, this->buf->beginBuf, bufferSize(this->buf), &this->preferences);
     if (LZ4F_isError(size))
         return errorLz4BeginFailed;
 
     // Flush the frame header, so we start with an empty buffer.
-    this->buf->writePtr += size;
+    this->buf->endData += size;
     bufferForceFlush(this->buf, this, &error);
 
     return error;
@@ -46,8 +46,8 @@ lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSi
         return 0;
 
     // Convert the uncompressed bytes and store them in our buffer.
-    size_t compressedSize = LZ4F_compressUpdate(this->cctx, this->buf->writePtr, this->buf->endPtr - this->buf->writePtr,
-                                                 uncompressedBytes, uncompressedSize, &compressOptions);
+    size_t compressedSize = LZ4F_compressUpdate(this->cctx, this->buf->endData, this->buf->endBuf - this->buf->endData,
+                                                uncompressedBytes, uncompressedSize, &compressOptions);
 
     // Verify the compression went as planned. It always should if our buffer was allocated properly.
     if (LZ4F_isError(compressedSize))
@@ -57,7 +57,7 @@ lz4CompressWrite(Lz4Filter *this, Byte *uncompressedBytes, size_t uncompressedSi
     }
 
     // Add it to buf and flush it out to the next filter.
-    this->buf->writePtr += compressedSize;
+    this->buf->endData += compressedSize;
     bufferForceFlush(this->buf, this, error);
     if (isError(*error))
         return 0;
@@ -71,7 +71,7 @@ void
 lz4CompressClose(Lz4Filter *this, Error *error)
 {
     // Generate a frame footer.
-    size_t size = LZ4F_compressEnd(this->cctx, this->buf->buf, this->bufferSize, &compressOptions);
+    size_t size = LZ4F_compressEnd(this->cctx, this->buf->beginBuf, this->bufferSize, &compressOptions);
     if (LZ4F_isError(size))
     {
         *error = errorLz4FailedToCompress;
@@ -79,7 +79,7 @@ lz4CompressClose(Lz4Filter *this, Error *error)
     }
 
     // Flush the footer.
-    this->buf->writePtr += size;
+    this->buf->endData += size;
     bufferForceFlush(this->buf, this, error);
 
     // Pass the "close" down the line so stream is closed properly.

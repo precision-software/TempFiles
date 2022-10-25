@@ -19,7 +19,7 @@ struct FileSplitFilter
     int perm;
 };
 
-Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
+static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
 
 Error fileSplitOpen(FileSplitFilter *this, char *name, int mode, int perm)
 {

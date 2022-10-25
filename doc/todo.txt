@@ -6,3 +6,4 @@
 - update unit tests to only issue multiples of blocksize.
 - separate unit tests for each filter/pipeline.
 - add isReadable, isWriteable, isOpen to header, so passThroughXXX can do some simple error handling (instead of each filter)
+- Converter: change names begin->init, convert->update, end->final  to match openSSL vocabulary.

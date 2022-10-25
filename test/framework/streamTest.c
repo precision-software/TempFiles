@@ -84,14 +84,15 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
+    beginTest(fileName);
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
 }
 
 void streamTest(FileSource *pipe, char *nameFmt)
 {
-    size_t fileSize[] = {0, 1, 16, 1024, 1027, 1024*1024, 64*1024*1024 + 127};
-    size_t bufSize[] = {1, 16, 1024, 32*1024};
+    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
+    size_t bufSize[] = {1024, 32*1024, 64, 1};
 #define countof(array) (sizeof(array)/sizeof(array[0]))
 
     for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)

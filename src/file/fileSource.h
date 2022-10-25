@@ -19,4 +19,6 @@ size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 
 void fileClose(FileSource *this, Error *error);
 
+void filePrintf(FileSource *this, Error *error, char *fmt, ...);
+
 #endif //FILTER_FILESOURCE_H

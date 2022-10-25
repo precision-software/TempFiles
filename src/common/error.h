@@ -36,9 +36,9 @@ inline static bool errorIsEOF(Error error) {return error.code == errorCodeEOF; }
 inline static bool errorIsSystem(Error error) {return error.code < 0;}
 
 // Predefined errors.
-
-static const Error errorOK = {.code = errorCodeOK, .causedBy=NULL, .msg="OK - no error"};
-static const Error errorEOF = {.code = errorCodeEOF, .causedBy=NULL, .msg = "EOF"};
-inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno), .causedBy=NULL};}
+static const Error errorOK = {.code = errorCodeOK, .msg="OK - no error"};
+static const Error errorEOF = {.code = errorCodeEOF, .msg = "EOF"};
+inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno)};}
+static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="Not Implemented"};
 
 #endif //FILTER_ERROR_H

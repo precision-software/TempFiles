@@ -12,9 +12,9 @@ Write out all data in the buffer, even if the buffer isn't full.
 void bufferForceFlush(Buffer *buf, void *filter, Error *error) // TODO: pass *error as a param, check + return.
 {
     // If the buffer has data to write ...
-    size_t remaining = buf->writePtr - buf->readPtr;
+    size_t remaining = bufferDataSize(buf);
     if (remaining > 0)
-        passThroughWriteAll(filter, buf->readPtr, remaining, error);
+        passThroughWriteAll(filter, buf->beginData, remaining, error);
 
     bufferReset(buf);
 }
@@ -37,9 +37,9 @@ void bufferFill(Buffer *this, void *filter, Error *error)  // TODO: pass error a
     if (bufferIsEmpty(this))
     {
         // Read in a new buffer. Request a full buffer, but OK if less arrives.
-        size_t actualSize = passThroughRead(filter, this->writePtr, this->endPtr - this->writePtr, error);
+        size_t actualSize = passThroughRead(filter, this->endData, this->endBuf - this->endData, error);
         if (errorIsOK(*error))
-            this->writePtr += actualSize;
+            this->endData += actualSize;
     }
 }
 
@@ -48,10 +48,10 @@ bufferNew(size_t size)
 {
     // Allocate memory for the buffer structure.
     Buffer *this = malloc(sizeof(Buffer));
-    this->buf = malloc(size);
+    this->beginBuf = malloc(size);
 
     // Set up the internal pointers for an empty buffer.
-    this->endPtr = this->buf + size;
+    this->endBuf = this->beginBuf + size;
     bufferReset(this);
 
     return this;
@@ -60,7 +60,7 @@ bufferNew(size_t size)
 void
 bufferFree(Buffer *this)
 {
-    free(this->buf);
+    free(this->beginBuf);
     free(this);
 }
 

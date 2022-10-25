@@ -16,11 +16,11 @@
 // A generic data buffer.
 typedef struct Buffer
 {
-    Byte *buf;                                                      // The data buffer itself. TODO: rename to beginPtr.
-    Byte *endPtr;                                                   // The end of the buffer, where size = endPtr-buf;
+    Byte *beginBuf;                                                      // The data buffer itself. TODO: rename to beginPtr.
+    Byte *endBuf;                                                   // The end of the buffer, where size = endBuf - beginBuf
 
-    Byte *readPtr;                                                  // Points to the next byte to be read from buffer.
-    Byte *writePtr;                                                 // Points to the last byte written to the buffer.
+    Byte *beginData;                                                // Points to the beginning of valid data.
+    Byte *endData;                                                  // Points to the end of valid data, where size = endData - beginData.
 } Buffer;
 
 inline static size_t sizeMin(size_t size1, size_t size2) {return (size1<size2)? size1: size2;}
@@ -28,49 +28,61 @@ inline static size_t sizeMax(size_t size1, size_t size2) {return (size1>size2)? 
 inline static size_t sizeRoundDown(size_t size, size_t itemSize) {return size / itemSize * itemSize;}
 inline static size_t sizeRoundUp(size_t size, size_t itemSize) {return sizeRoundDown(size+itemSize-1, itemSize);}
 
-inline static size_t bufferAvail(Buffer *this) {return this->endPtr - this -> writePtr;}
-inline static bool bufferIsFull(Buffer *this) {return bufferAvail(this) == 0;}
+inline static size_t bufferDataSize(Buffer *this){return this->endData - this->beginData;}
+inline static size_t bufferSize(Buffer *this) {return this->endBuf - this->beginBuf;}
 
-inline static size_t bufferCount(Buffer *this){return this->writePtr - this->readPtr;}
-inline static bool bufferIsEmpty(Buffer *this) {return bufferCount(this) == 0;}
+inline static size_t bufferAvailSize(Buffer *this) {return this->endBuf - this->endData;}
 
-inline static size_t bufferSize(Buffer *this) {return this->endPtr - this->buf;}
+inline static bool bufferIsFull(Buffer *this) {return bufferAvailSize(this) == 0;}
+inline static bool bufferIsEmpty(Buffer *this) {return bufferDataSize(this) == 0;}
+
+inline static bool bufferValid(Buffer *this)
+    {return this->endBuf >= this->endData && this->endData >= this->beginData && this->beginData >= this->beginBuf;}
 
 inline static void
 bufferReset(Buffer *this)
 {
-    this->readPtr = this->writePtr = this->buf;
+    this->beginData = this->endData = this->beginBuf;
 }
 
-
-inline static size_t
-readFromBuffer(Buffer *this, Byte *buf, size_t bufSize)
+inline static size_t toBuffer(Buffer *this, size_t size)
 {
-    size_t size = sizeMin(bufSize, this->writePtr - this->readPtr);
-    memcpy(buf, this->readPtr, size);
-    this->readPtr += size;
+    size_t actual = sizeMin(size, bufferAvailSize(this));
+    this->endData += actual;
+    return actual;
+}
 
+inline static size_t fromBuffer(Buffer *this, size_t size)
+{
+    size_t actual = sizeMin(size, bufferDataSize(this));
+    this->beginData += actual;
     if (bufferIsEmpty(this))
         bufferReset(this);
-
-    return size;
+    return actual;
 }
 
 inline static size_t
-writeToBuffer(Buffer *this, Byte *buf, size_t bufSize)
+copyBytes(Byte *to, Byte *from, size_t size) { memcpy(to, from, size); return size; }
+
+inline static size_t
+copyFromBuffer(Buffer *this, Byte *buf, size_t size)
 {
-    assert(!bufferIsFull(this));
-    size_t size = sizeMin(bufSize, this->endPtr - this->writePtr);
-    memcpy(this->writePtr, buf, size);
-    this->writePtr += size;
-    return size;
+    Byte *from = this->beginData;
+    return copyBytes(buf, from, fromBuffer(this, size));
+}
+
+inline static size_t
+copyToBuffer(Buffer *this, Byte *buf, size_t size)
+{
+    Byte *to = this->endData;
+    return copyBytes(to, buf, toBuffer(this, size));
 }
 
 inline static Byte
 readByte(Buffer *this)
 {
     assert(!bufferIsEmpty(this));
-    Byte byte = *this->readPtr++;
+    Byte byte = *this->beginData++;
     if (bufferIsEmpty(this))
         bufferReset(this);
     return byte;
@@ -80,7 +92,7 @@ inline static void
 writeByte(Buffer *this, Byte byte)
 {
     assert(!bufferIsFull(this));
-    *this->writePtr++ = byte;
+    *this->endData++ = byte;
 }
 
 

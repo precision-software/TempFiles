@@ -51,7 +51,7 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
         return passThroughWrite(this, buf, bufSize, error);
 
     // Copy data into the buffer.
-    size_t actualSize = writeToBuffer(this->buf, buf, bufSize);
+    size_t actualSize = copyToBuffer(this->buf, buf, bufSize);
 
     // Flush the buffer if full, attributing any errors to our write request.
     bufferFlush(this->buf, this, error);
@@ -77,7 +77,7 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
         return 0;
 
     // Copy data from buffer since all is OK;
-    return readFromBuffer(this->buf, buf, bufSize);
+    return copyFromBuffer(this->buf, buf, bufSize);
 }
 
 

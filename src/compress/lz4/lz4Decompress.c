@@ -32,8 +32,8 @@ lz4DecompressRead(Lz4Filter *this, Byte *decompressedBytes, size_t decompressedS
     if (isError(*error))  return 0;
 
     // We are taking compressed bytes from our buffer and returning decompressed bytes to our caller.
-    size_t compressedSize = this->buf->writePtr - this->buf->readPtr;
-    Byte *compressedBytes = this->buf->readPtr;
+    size_t compressedSize = this->buf->endData - this->buf->beginData;
+    Byte *compressedBytes = this->buf->beginData;
 
     // Decompress some of the data and check for errors.
     // "decompressedSize" and "compressedSize" are updated to indicate how many bytes were decompressed.
@@ -47,7 +47,7 @@ lz4DecompressRead(Lz4Filter *this, Byte *decompressedBytes, size_t decompressedS
     }
 
     // Remove compressed data from the internal buffer.  // TODO: DRY
-    this->buf->readPtr += compressedSize;
+    this->buf->beginData += compressedSize;
     if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
 
     // Increase size of this->buf so it holds nextSize bytes.
