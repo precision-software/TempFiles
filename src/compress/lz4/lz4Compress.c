@@ -14,8 +14,8 @@ lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm)
 
     // Verify our next stage is buffered. Our output size will vary from block to block, so next stage must buffer us.
     // Ideally, we would check this in "New()", but it is easier to report errors from here.
-    if (this->header.next->blockSize != 1)
-        return errorLz4NeedsOutputBuffering;
+    //if (this->header.next->blockSize != 1)
+    //    return errorLz4NeedsOutputBuffering;
 
     // LZ4F allocates its own context. We provide a pointer to the pointer which it then updates.
     size_t size = LZ4F_createCompressionContext(&this->cctx, LZ4F_VERSION);
@@ -88,4 +88,9 @@ lz4CompressClose(Lz4Filter *this, Error *error)
     // release the compression context
     LZ4F_freeCompressionContext(this->cctx);
     this->cctx = NULL;
+}
+
+size_t lz4CompressSize(Lz4Filter *this, size_t fromSize)
+{
+    size_t toSize = fromSize + 16;  // TODO: what should it be?  Not critical since it does partial buffers.
 }

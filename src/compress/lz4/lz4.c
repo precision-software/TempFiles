@@ -37,18 +37,14 @@ Filter *lz4FilterNew(Filter *next, size_t blockSize)
     size_t bufferSize = LZ4F_compressBound(blockSize, &preferences);
 
     Lz4Filter *this = malloc(sizeof(Lz4Filter));
+
     *this = (Lz4Filter) {
-        .header = (Filter) {
-            .blockSize = 1,
-            .iface = &lz4Interface,
-            .next = next,
-        },
         .preferences = preferences,
-        .blockSize = blockSize,
-        .buf = bufferNew(bufferSize)
+        .blockSize = blockSize, // TODO:
+        .buf = bufferNew(bufferSize)  // TODO:
     };
 
-    return (Filter *)this;
+    return filterInit(this, &lz4Interface, next);
 }
 
 

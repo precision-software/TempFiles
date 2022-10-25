@@ -8,6 +8,6 @@
 #include "common/filter.h"
 #include "common/converter.h"
 
-Filter *convertFilterNew(Filter *next, size_t blockSize, Converter *writer, Converter* reader);
+Filter *convertFilterNew(size_t blockSize, Converter *writer, Converter* reader, Filter *next);
 
 #endif //FILTER_CONVERTFILTER_H

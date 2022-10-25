@@ -6,6 +6,8 @@
 #include <stdbool.h>
 
 #include "buffer.h"
+#define BEGIN do {
+#define END   } while (0)
 
 /***********************************************************************************************************************************
 The basic filter which serves as a header for all other filter types.
@@ -13,8 +15,15 @@ The basic filter which serves as a header for all other filter types.
 typedef struct Filter {
     struct Filter *next;                                            // Points to the next filter in the pipeline
     struct FilterInterface *iface;                                  // The set of functions for processing requests.
-    size_t blockSize;                                               // The block size we expect, 1 if buffered.
-    Buffer *buf;                                                    // Our internal buffer, if we want to share it.
+
+    // Passthrough objects - cache them so we don't have to scan ahead looking for a filter to process the event.
+    struct Filter *nextOpen;
+    struct Filter *nextRead;
+    struct Filter *nextWrite;
+    struct Filter *nextSync;
+    struct Filter *nextClose;
+    struct Filter *nextAbort;
+    struct Filter *nextSize;
 } Filter;
 
 /***********************************************************************************************************************************
@@ -28,6 +37,7 @@ typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
 typedef void (*FilterSync)(void *this, Error *error);
 typedef void (*FilterAbort)(void *this, Error *error);
+typedef size_t (*FilterSize)(void *this, size_t size);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -36,6 +46,11 @@ typedef struct FilterInterface {
     FilterRead fnRead;
     FilterSync fnSync;
     FilterAbort fnAbort;
+    FilterSize fnSize;
 } FilterInterface;
+
+
+Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
+
 
 #endif //UNTITLED1_FILTER_H

@@ -8,55 +8,6 @@
 static Error notInSink =
         (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
-/****
-PassThrough macro which finds "next" the following filter which will process the request
-Avoids a lot of repetition, intended for lazy typists.
-*/
-#define passThroughGetNext(call, error, errorReturn) \
-    if (isError(error)) return errorReturn;  \
-    Filter *next = (Filter*)this;\
-    do {\
-        next = next->next; \
-    } while (next != NULL && next->iface->fn##call == NULL); \
-    if (next == NULL) { \
-        error = notInSink; \
-        return errorReturn; \
-    }
-
-// Declare pass through functions for each type of request.
-Error passThroughOpen(void *this, char *path, int mode, int perm)
-{
-    Error error = errorOK;
-    passThroughGetNext(Open, error, error);
-    return next->iface->fnOpen(next, path, mode, perm);
-}
-
-size_t passThroughRead(void *this, Byte *buf, size_t size, Error *error)
-{
-    passThroughGetNext(Read, *error, 0);
-    return next->iface->fnRead(next, buf, size, error);
-}
-
-size_t passThroughWrite(void *this, Byte *buf, size_t size, Error *error)
-{
-    passThroughGetNext(Write, *error, 0);
-    size_t actual = next->iface->fnWrite(next, buf, size, error);
-    assert(actual <= size);
-    return actual;
-}
-
-void passThroughClose(void *this, Error *error)
-{
-    passThroughGetNext(Close, *error, (void)0);
-    return next->iface->fnClose(next, error);
-}
-
-void passThroughSync(void *this, Error *error)
-{
-    passThroughGetNext(Close, *error, (void)0);
-    return next->iface->fnSync(next, error);
-}
-
 
 /***********************************************************************************************************************************
 Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).

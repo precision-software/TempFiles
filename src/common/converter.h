@@ -10,8 +10,8 @@ converterFree
 converterNew()
  */
 
-#ifndef FILTER_CONVERTER_H
-#define FILTER_CONVERTER_H
+#ifndef CONVERTER_H
+#define CONVERTER_H
 
 #include "common/error.h"
 
@@ -24,8 +24,8 @@ typedef void (*ConvertFreeFn)(void *this, Error *error);
 
 typedef struct ConverterIface
 {
-    ConvertBeginFn fnBegin;
     ConvertSizeFn fnSize;
+    ConvertBeginFn fnBegin;
     ConvertConvertFn fnConvert;
     ConvertEndFn fnEnd;
     ConvertFreeFn fnFree;
@@ -82,4 +82,6 @@ static inline void converterFree(Converter *this, Error *error)
     return this->iface->fnFree(this, error);
 }
 
-#endif //FILTER_CONVERTER_H
+
+
+#endif //CONVERTER_H

@@ -67,3 +67,7 @@ lz4DecompressClose(Lz4Filter *this, Error *error)
     LZ4F_freeDecompressionContext(this->dctx);
     this->dctx = NULL;
 }
+size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
+{
+    size_t toSize = fromSize + 16;  // TODO: what should it be?  Not critical since it does partial buffers.
+}

@@ -5,6 +5,7 @@
 #include "common/passThrough.h"
 #include "common/error.h"
 #include "common/convertFilter.h"
+#include "common/converter.h"
 
 static const Error errorLZ4ContextFailed =
         (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
@@ -27,17 +28,25 @@ typedef struct ConvertFilter
     Filter header;
     bool readable;
     bool writeable;
-    size_t blockSize;   // uncompressed block size
+
     size_t bufferSize;  // big enough to hold max compressed block size
     Buffer *buf;        // our buffer.
     bool eof;
 
     Converter *writeConverter;
+    size_t  writeMax;
     Converter *readConverter;
+    size_t readMin;
 
     Converter *converter;
 } ConvertFilter;
 
+size_t convertFilterSize(ConvertFilter *this, size_t size)
+{
+    this->writeMax = size;
+    this->readMin = passThroughSize(this, converterSize(this->writeConverter, size));
+    return converterSize(this->readConverter, this->readMin);
+}
 Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
 {
     assert(bufferValid(this->buf));
@@ -77,12 +86,12 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
     if (isError(*error))
         return 0;
 
-    // Read downstream data into the buffer if it is empty.
-    bufferFill(this->buf, this, error);
+    // Read downstream data into the buffer if it is empty. We want minRead bytes in the buffer, so the next read will empty it.
+    bufferFill(this->buf, this, error);  //
     assert(bufferValid(this->buf));
 
     // Figure out max bytes we are able to pull from our internal buffer.
-    size_t inSize = bufferDataSize(this->buf);
+    size_t inSize = bufferDataSize(this->buf);  // Must be less than minRead bytes.
     size_t outSize = size;
 
     // CASE: internal buffer has data to convert, so convert it into the callers buffer.
@@ -166,26 +175,20 @@ FilterInterface convertInterface = {
         .fnRead = (FilterRead) convertFilterRead,
         .fnWrite = (FilterWrite)convertFilterWrite,
         .fnClose = (FilterClose) convertFilterClose,
+        .fnSize = (FilterSize) convertFilterSize,
 };
 
-Filter *convertFilterNew(Filter *next, size_t blockSize, Converter *writer, Converter* reader)
+Filter *convertFilterNew(size_t bufferSize, Converter *writer, Converter* reader, Filter *next)
 {
-    size_t bufferSize = sizeRoundUp(16*1024, blockSize);
     ConvertFilter *this = malloc(sizeof(ConvertFilter));
     *this = (ConvertFilter) {
-            .header = (Filter) {
-                    .blockSize = blockSize,
-                    .iface = &convertInterface,
-                    .next = next,
-            },
-            .blockSize = blockSize,
             .bufferSize = bufferSize,
             .writeConverter = writer,
             .readConverter = reader,
             .buf = bufferNew(bufferSize)
     };
 
-    return (Filter *)this;
+    return filterInit(this, &convertInterface, next);
 }
 
 

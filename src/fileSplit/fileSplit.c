@@ -114,20 +114,15 @@ static FilterInterface fileSplitInterface = {
     .fnWrite = (FilterWrite)fileSplitWrite
 };
 
-Filter *fileSplitFilterNew(Filter *next, size_t segmentSize, PathGetter getPath, void *pathData)
+Filter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, Filter *next)
 {
     FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
     *this = (FileSplitFilter) {
-        .header = (Filter) {
-            .next = next,
-            .blockSize = next->blockSize,
-            .iface = &fileSplitInterface
-        },
         .getPath = getPath,
         .pathData = pathData,
         .segmentSize = segmentSize
     };
-    return (Filter *)this;
+    return filterInit(this, &fileSplitInterface, next);
 }
 
 void formatPath(void *fmt, char *name, size_t segmentIdx, char path[PATH_MAX])

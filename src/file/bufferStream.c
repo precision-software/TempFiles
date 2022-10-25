@@ -26,6 +26,15 @@ struct BufferStream
 static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
 
+size_t bufferStreamSize(BufferStream *this, size_t size)
+{
+    size_t minWrite = passThroughSize(this, size);
+    size_t bufferSize = sizeMin(16 * 1024, sizeMin(size, minWrite));
+
+    this->buf = bufferNew(bufferSize);
+    return 1;
+}
+
 Error
 bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 {
@@ -46,9 +55,9 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
         return 0;
 
     // If our buffer is empty and our write is larger than a single block, avoid the capy and pass it on directly.
-    size_t nextBlockSize = this->header.next->blockSize;
-    if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
-        return passThroughWrite(this, buf, bufSize, error);
+    //size_t nextBlockSize = this->header.next->blockSize;
+    //if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
+    //    return passThroughWrite(this, buf, bufSize, error);
 
     // Copy data into the buffer.
     size_t actualSize = copyToBuffer(this->buf, buf, bufSize);
@@ -65,9 +74,9 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
         return 0;
 
     // If our buffer is empty and our read is more our successor's block size, avoid the copy and pass it on directly.
-    size_t nextBlockSize = this->header.next->blockSize;
-    if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
-        return passThroughRead(this, buf, bufSize, error);
+    //size_t nextBlockSize = this->header.next->blockSize;
+    //if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
+    //    return passThroughRead(this, buf, bufSize, error);
 
     // If buffer is empty, fetch some more data, attributing errors to our read request.
     bufferFill(this->buf, this, error);
@@ -106,6 +115,7 @@ FilterInterface bufferStreamInterface = (FilterInterface)
     .fnClose = (FilterClose)bufferStreamClose,
     .fnRead = (FilterRead)bufferStreamRead,
     .fnSync = (FilterSync)bufferStreamSync,
+    .fnSize = (FilterSize)bufferStreamSize,
 } ;
 
 /***********************************************************************************************************************************
@@ -115,16 +125,6 @@ It allocates an output buffer which matches the block size of the next filter in
 Filter *bufferStreamNew(Filter *next)
 {
     BufferStream *this = palloc(sizeof(BufferStream));
-    *this = (BufferStream) {
-        .header = (Filter){
-            .next = next,
-            .blockSize = 1,
-            .iface = &bufferStreamInterface
-        },
 
-        // Allocate a buffer to hold multiple blocks of our successor.
-        .buf = bufferNew(sizeRoundUp(16 * 1024, next->blockSize))
-    };
-
-    return (Filter *)this;
+    return filterInit(this, &bufferStreamInterface, next);
 }

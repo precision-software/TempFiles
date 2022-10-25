@@ -6,11 +6,14 @@
 
 struct FileSource {
     Filter header;
+    bool initialized;
 };
 
 
 Error fileOpen(FileSource *this, char *path, int mode, int perm)
 {
+    if (!this->initialized)
+        passThroughSize(this, 16*1024);
     return passThroughOpen(this, path, mode, perm);
 }
 
@@ -35,9 +38,9 @@ FileSource *
 fileSourceNew(Filter *next)
 {
     FileSource *this = malloc(sizeof(FileSource));
-    *this = (FileSource) {
-        .header = (Filter){.next=next, .iface=&passThroughInterface}
-    };
+    filterInit(this, &passThroughInterface, next);
+
+    passThroughSize(this, 16*1024); // TODO: ????
 
     return this;
 }

@@ -81,12 +81,19 @@ void openSSLConverterFree(OpenSSLConverter *this, Error *error)
 
 }
 
+size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
+{
+    // OK to return larger than necessary. Add extra space for padding and checksum.
+    return inSize + 2*EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE;
+}
+
 ConverterIface openSSLConverterInterface = (ConverterIface)
         {
                 .fnBegin = (ConvertBeginFn)openSSLConverterBegin,
                 .fnConvert = (ConvertConvertFn) openSSLConverterProcess,
                 .fnEnd = (ConvertEndFn)openSSLConverterEnd,
-                .fnFree = (ConvertFreeFn)openSSLConverterFree
+                .fnFree = (ConvertFreeFn)openSSLConverterFree,
+                .fnSize = (ConvertSizeFn)openSSLConverterSize,
         };
 
 
@@ -108,9 +115,9 @@ Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t key
 }
 
 
-Filter *openSSLNew(Filter *next, char *cipherName, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)
+Filter *openSSLNew(char *cipherName, Byte *key, size_t keyLen, Byte *iv, size_t ivLen, Filter *next)
 {
     Converter *encrypt = openSSLConverterNew(cipherName, true, key, keyLen, iv, ivLen);
     Converter *decrypt = openSSLConverterNew(cipherName, false, key, keyLen, iv, ivLen);
-    return convertFilterNew(next, 16*1024, encrypt, decrypt);
+    return convertFilterNew(16*1024, encrypt, decrypt, next);
 }

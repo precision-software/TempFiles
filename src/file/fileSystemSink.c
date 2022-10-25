@@ -14,6 +14,7 @@ struct FileSystemSink {
     bool writable;                                                  // Can we write to the file?
     bool readable;                                                  // Can we read from the file?
     bool eof;                                                       // Has the currently open file read past eof?
+    size_t blockSize;
 };
 
 static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
@@ -46,8 +47,7 @@ size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *e
 
     // Truncate large unbuffered writes to a multiple of blockSize,
     // Smaller writes go through on the premise they are at the end of the file.
-    size_t blockSize = this->header.blockSize;
-    size_t size = sizeMax(bufSize, sizeRoundDown(bufSize, blockSize));
+    size_t size = sizeMax(bufSize, sizeRoundDown(bufSize, this->blockSize));
 
     // Write the data.
     return sys_write(this->fd, buf, size, error);
@@ -56,14 +56,13 @@ size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *e
 size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
     // Truncate large reads to a multiple of blockSize.
-    size_t blockSize = this->header.blockSize;
-    size_t size = sizeRoundDown(bufSize, blockSize);
+    size_t size = bufSize; //sizeRoundDown(bufSize, this->blockSize);
 
     // Check for errors.
     if (isError(*error))                 ;
     else if (!this->readable)            *error = errorCantRead;
     else if (this->eof)                  *error = errorEOF;
-    else if (size < blockSize)           *error = errorReadTooSmall;
+    //else if (size < this->blockSize)     *error = errorReadTooSmall;
 
     return sys_read(this->fd, buf, size, error);
 }
@@ -86,13 +85,27 @@ void fileSystemSync(FileSystemSink *this, Error *error)
         sys_datasync(this->fd, error);
 }
 
+size_t fileSystemSize(FileSystemSink *this, size_t size)
+{
+    this->blockSize = sizeMax(16*1024, size);
+    return size;  // TODO: ????
+}
+
+void fileSystemAbort(FileSystemSink *this, Error *errorO)
+{
+    abort(); // TODO: not implemented.
+}
+
+
 FilterInterface fileSystemInterface = (FilterInterface)
 {
     .fnOpen = (FilterOpen)fileSystemOpen,
     .fnWrite = (FilterWrite)fileSystemWrite,
     .fnRead = (FilterRead)fileSystemRead,
     .fnClose = (FilterClose)fileSystemClose,
-    .fnSync = (FilterSync)fileSystemSync
+    .fnSync = (FilterSync)fileSystemSync,
+    .fnSize = (FilterSize)fileSystemSize,
+    .fnAbort = (FilterAbort)fileSystemAbort,
 };
 
 Filter *fileSystemSinkNew()
@@ -103,7 +116,6 @@ Filter *fileSystemSinkNew()
         .fd = -1,
         .header = (Filter){
             .iface=&fileSystemInterface,
-            .blockSize = 16*1024,
             .next=NULL}
     };
     return (Filter *)this;
