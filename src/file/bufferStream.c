@@ -17,7 +17,7 @@ It replicates the functionality of fread/fwrite/fseek, sending and receiving blo
 ***********************************************************************************************************************************/
 struct BufferStream
 {
-    Filter header;                                                  /* Common to all filters */
+    Filter filter;                                                  /* Common to all filters */
     Buffer *buf;                                                    /* Local buffer */
     bool readable;
     bool writeable;

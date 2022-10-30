@@ -9,7 +9,7 @@ static void openCurrentSegment(FileSplitFilter *this, Error *error);
 
 struct FileSplitFilter
 {
-    Filter header;
+    Filter filter;
     size_t segmentSize;
     PathGetter getPath;
     void *pathData;

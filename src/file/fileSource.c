@@ -5,7 +5,7 @@
 #include "fileSource.h"
 
 struct FileSource {
-    Filter header;
+    Filter filter;
     bool initialized;
 };
 

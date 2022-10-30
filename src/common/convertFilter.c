@@ -25,27 +25,26 @@ static const Error errorLz4FailedToDecompress =
 
 typedef struct ConvertFilter
 {
-    Filter header;
+    Filter filter;
     bool readable;
     bool writeable;
+    bool eof;
 
     size_t bufferSize;  // big enough to hold max compressed block size
     Buffer *buf;        // our buffer.
-    bool eof;
+
 
     Converter *writeConverter;
-    size_t  writeMax;
     Converter *readConverter;
-    size_t readMin;
 
     Converter *converter;
 } ConvertFilter;
 
 size_t convertFilterSize(ConvertFilter *this, size_t size)
 {
-    this->writeMax = size;
-    this->readMin = passThroughSize(this, converterSize(this->writeConverter, size));
-    return converterSize(this->readConverter, this->readMin);
+    this->filter.writeSize = size;
+    this->filter.readSize = passThroughSize(this, converterSize(this->writeConverter, size));
+    return converterSize(this->readConverter, this->filter.readSize);
 }
 Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
 {
@@ -86,11 +85,11 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
     if (isError(*error))
         return 0;
 
-    // Read downstream data into the buffer if it is empty. We want minRead bytes in the buffer, so the next read will empty it.
+    // Read downstream data into our buffer, if there is room for a full read.
     bufferFill(this->buf, this, error);  //
     assert(bufferValid(this->buf));
 
-    // Figure out max bytes we are able to pull from our internal buffer.
+    // Convert bytes, up to a full read, from our buffer into our caller's buffer.
     size_t inSize = bufferDataSize(this->buf);  // Must be less than minRead bytes.
     size_t outSize = size;
 
@@ -114,7 +113,7 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
             *error = errorEOF;
     }
 
-    // Update the buffer to reflect the bytes that were actually copied out of our internal b
+    // Update the buffer to reflect the bytes that were actually copied out of our internal buffer.
     this->buf->beginData+=inSize; if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
     assert(bufferValid(this->buf));
     return outSize;

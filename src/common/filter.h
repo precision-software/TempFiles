@@ -16,6 +16,9 @@ typedef struct Filter {
     struct Filter *next;                                            // Points to the next filter in the pipeline
     struct FilterInterface *iface;                                  // The set of functions for processing requests.
 
+    size_t  writeSize;         // We must accept writes of this size (before conversion)
+    size_t  readSize;          // We must request reads of at least this size.
+
     // Passthrough objects - cache them so we don't have to scan ahead looking for a filter to process the event.
     struct Filter *nextOpen;
     struct Filter *nextRead;
@@ -23,7 +26,7 @@ typedef struct Filter {
     struct Filter *nextSync;
     struct Filter *nextClose;
     struct Filter *nextAbort;
-    struct Filter *nextSize;
+    struct Filter *nextSize;  // TODO: Always use next?
 } Filter;
 
 /***********************************************************************************************************************************

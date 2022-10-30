@@ -9,7 +9,7 @@
 
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
-    Filter header;                                                  // first in every Filter.
+    Filter filter;                                                  // first in every Filter.
     int fd;                                                         // The file descriptor for the currrently open file.
     bool writable;                                                  // Can we write to the file?
     bool readable;                                                  // Can we read from the file?
@@ -114,7 +114,7 @@ Filter *fileSystemSinkNew()
     *this = (FileSystemSink)
     {
         .fd = -1,
-        .header = (Filter){
+        .filter = (Filter){
             .iface=&fileSystemInterface,
             .next=NULL}
     };

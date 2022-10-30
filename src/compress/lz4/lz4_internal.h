@@ -13,7 +13,7 @@
 
 struct Lz4Filter
 {
-    Filter header;
+    Filter filter;
     bool readable;
     bool writeable;
     size_t blockSize;   // uncompressed block size
