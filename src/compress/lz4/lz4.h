@@ -8,7 +8,7 @@
 
 typedef struct Lz4Filter Lz4Filter;
 
-Filter *lz4FilterNew(Filter *next, size_t bufferSize);
+Filter *lz4FilterNew(size_t bufferSize, Filter *next);
 void Lz4FilterFree(void *this);
 
 #endif //FILTER_LZ4_H

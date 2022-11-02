@@ -78,22 +78,25 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
 /* Read data from our internal buffer, placing converted data into the caller's buffer.*/
 size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
-    assert(bufferValid(this->buf));
+    // First, check if we have encountered EOF on a previous read.
     if (this->eof && errorIsOK(*error) )
         *error = errorEOF;
-
     if (isError(*error))
         return 0;
 
-    // Read downstream data into our buffer, if there is room for a full read.
-    bufferFill(this->buf, this, error);  //
-    assert(bufferValid(this->buf));
+    // Read downstream data into our buffer if there is room for a full block.
+    if (bufferAvailSize(this->buf) >= this->filter.readSize) {
+        size_t actual = passThroughRead(this, this->buf->endData, bufferAvailSize(this->buf), error);
+        this->buf->endData += actual;
+    }
 
-    // Convert bytes, up to a full read, from our buffer into our caller's buffer.
-    size_t inSize = bufferDataSize(this->buf);  // Must be less than minRead bytes.
+    // Throttle input size to the number of blocks our caller can receive. There is always at least one block requested.
+    assert(size >= this->filter.prev->readSize);  // Reads must always request at least one block.
+    size_t nrBlocks = size / this->filter.prev->readSize;  // From assertion, nrBlocks > 0.
+    size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.readSize);
     size_t outSize = size;
 
-    // CASE: internal buffer has data to convert, so convert it into the callers buffer.
+    // CASE: internal buffer has data to convert, so convert multiple blocks into the callers buffer.
     if (inSize > 0)
         converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
 
@@ -122,19 +125,22 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
 /* Write converted data into our internal buffer, flushing as needed. */
 size_t convertFilterWrite(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
-    // Flush data if the buffer is full.
-    bufferFlush(this->buf, this, error);
-
     assert(bufferValid(this->buf));
 
-    // Figure out max bytes we are able to add to our buffer or pull in from our caller.
-    size_t outSize = bufferAvailSize(this->buf);
-    size_t inSize = sizeMin(size, this->bufferSize); // TODO: limit input size so output fits into the presized buffer.
+    // Flush data to assure we have at least a full block of processed space available.
+    if (bufferAvailSize(this->buf) < this->filter.writeSize)
+        bufferForceFlush(this->buf, this, error);
 
-    // Convert as many bytes as is convenient. Note in and out sizes are zero if error.
+    // Limit the input size to the number of output blocks we can fit into our buffer.
+    size_t outSize = bufferAvailSize(this->buf);
+    size_t nrBlocks = outSize / this->filter.writeSize;
+    size_t inSize = sizeMin(size, nrBlocks * this->filter.prev->writeSize);
+
+    // Convert the data.
     size_t temp = outSize;
     converterProcess(this->converter, this->buf->endData, &outSize, buf, &inSize, error);
     assert(outSize <= temp);
+
     // Update the buffer to reflect the bytes that were actually added to our internal buf.
     this->buf->endData+=outSize;
 

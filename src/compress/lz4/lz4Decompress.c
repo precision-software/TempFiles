@@ -69,5 +69,5 @@ lz4DecompressClose(Lz4Filter *this, Error *error)
 }
 size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
 {
-    size_t toSize = fromSize + 16;  // TODO: what should it be?  Not critical since it does partial buffers.
+    size_t toSize = 3 * fromSize;  // TODO: what should it be?  Not critical since it does partial buffers.
 }

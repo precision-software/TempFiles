@@ -26,12 +26,17 @@ struct BufferStream
 static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
 
-size_t bufferStreamSize(BufferStream *this, size_t size)
+size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 {
-    size_t minWrite = passThroughSize(this, size);
-    size_t bufferSize = sizeMin(16 * 1024, sizeMin(size, minWrite));
+    assert(writeSize > 0);
+    // We don't change the size of data when we "transform" it. Note we don't change the data either, soit is an "identity" transform.
+    this->filter.writeSize = writeSize;
+    this->filter.readSize = passThroughSize(this, writeSize);
 
-    this->buf = bufferNew(bufferSize);
+    // Round the buffer size up to match the basic block sizes. We can be larger, so just pick the bigger of the two.
+    size_t bufSize = sizeRoundUp(16*1024, sizeMax(this->filter.writeSize, this->filter.readSize));
+    this->buf = bufferNew(bufSize);
+
     return 1;
 }
 
@@ -55,9 +60,9 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
         return 0;
 
     // If our buffer is empty and our write is larger than a single block, avoid the capy and pass it on directly.
-    //size_t nextBlockSize = this->header.next->blockSize;
-    //if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
-    //    return passThroughWrite(this, buf, bufSize, error);
+    size_t nextBlockSize = this->filter.next->writeSize;
+    if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
+        return passThroughWrite(this, buf, bufSize, error);
 
     // Copy data into the buffer.
     size_t actualSize = copyToBuffer(this->buf, buf, bufSize);
@@ -73,10 +78,9 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
     if (!errorIsOK(*error))
         return 0;
 
-    // If our buffer is empty and our read is more our successor's block size, avoid the copy and pass it on directly.
-    //size_t nextBlockSize = this->header.next->blockSize;
-    //if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
-    //    return passThroughRead(this, buf, bufSize, error);
+    // If our buffer is empty and the read is more than our block size, avoid the copy and read it directly to our caller.
+    if (bufferIsEmpty(this->buf) && bufSize >= this->filter.readSize)
+        return passThroughRead(this, buf, bufSize, error);
 
     // If buffer is empty, fetch some more data, attributing errors to our read request.
     bufferFill(this->buf, this, error);

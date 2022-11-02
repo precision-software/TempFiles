@@ -87,8 +87,9 @@ void fileSystemSync(FileSystemSink *this, Error *error)
 
 size_t fileSystemSize(FileSystemSink *this, size_t size)
 {
-    this->blockSize = sizeMax(16*1024, size);
-    return size;  // TODO: ????
+    this->filter.writeSize = size;
+    this->filter.readSize = 16*1024;
+    return this->filter.readSize;
 }
 
 void fileSystemAbort(FileSystemSink *this, Error *errorO)

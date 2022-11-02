@@ -31,8 +31,10 @@ void bufferFlush(Buffer *this, void *filter, Error *error)  // TODO pass error a
 /***********************************************************************************************************************************
 Fill up an empty buffer. Do not overwrite existing data!
 ***********************************************************************************************************************************/
-void bufferFill(Buffer *this, void *filter, Error *error)  // TODO: pass error and test first.
+void bufferFill(Buffer *this, void *filterVoid, Error *error)  // TODO: pass error and test first.
 {
+    Filter *filter = filterVoid;
+
     // If the buffer is empty,
     if (bufferIsEmpty(this))
     {

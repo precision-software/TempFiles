@@ -21,4 +21,8 @@ void fileClose(FileSource *this, Error *error);
 
 void filePrintf(FileSource *this, Error *error, char *fmt, ...);
 
+void filePut1(FileSource *this, Byte b, Error *error);
+void filePut2(FileSource *this, u_int16_t u, Error *error);
+void filePut4(FileSource *this, u_int32_t u, Error *error);
+
 #endif //FILTER_FILESOURCE_H

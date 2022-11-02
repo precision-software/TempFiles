@@ -107,11 +107,19 @@ static void openCurrentSegment(FileSplitFilter *this, Error *error)
     *error = passThroughOpen(this, path, this->mode, this->perm);
 }
 
+size_t fileSplitSize(FileSplitFilter *this, size_t writeSize)
+{
+    this->filter.writeSize = writeSize;
+    this->filter.readSize = passThroughSize(this, writeSize);
+    return this->filter.readSize;
+}
+
 static FilterInterface fileSplitInterface = {
     .fnClose = (FilterClose)fileSplitClose,
     .fnOpen = (FilterOpen)fileSplitOpen,
     .fnRead = (FilterRead)fileSplitRead,
-    .fnWrite = (FilterWrite)fileSplitWrite
+    .fnWrite = (FilterWrite)fileSplitWrite,
+    .fnSize = (FilterSize)fileSplitSize
 };
 
 Filter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, Filter *next)

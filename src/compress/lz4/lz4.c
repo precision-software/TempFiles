@@ -29,12 +29,12 @@ void lz4FilterClose(Lz4Filter *this, Error *error)
 }
 
 
-Filter *lz4FilterNew(Filter *next, size_t blockSize)
+Filter *lz4FilterNew(size_t blockSize, Filter *next)
 {
     // Set up our encryption preferences. In particular, minimize buffering during compression.
     LZ4F_preferences_t preferences = LZ4F_INIT_PREFERENCES;
     //preferences.autoFlush = 1;
-    size_t bufferSize = LZ4F_compressBound(blockSize, &preferences);
+
 
     Lz4Filter *this = malloc(sizeof(Lz4Filter));
 
@@ -54,10 +54,19 @@ void lz4FilterFree(Lz4Filter *this)
 
 }
 
+size_t lz4FilterSize(Lz4Filter *this, size_t writeSize)
+{
+    this->filter.writeSize = sizeMax(16*1024m writeSize);
+    size_t nextWrite = LZ4F_compressBound(this->filter.writeSize, &this->preferences);
+    size_t nextRead = passThroughSize(this, nextWrite);
+
+}
+
 
 FilterInterface lz4Interface = {
         .fnOpen = (FilterOpen)lz4FilterOpen,
         .fnRead = (FilterRead)lz4DecompressRead,
         .fnWrite = (FilterWrite)lz4CompressWrite,
         .fnClose = (FilterClose)lz4FilterClose,
+        .fnSize = (FilterSize)lz4FilterSize
 };

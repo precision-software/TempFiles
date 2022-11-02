@@ -12,8 +12,6 @@ struct FileSource {
 
 Error fileOpen(FileSource *this, char *path, int mode, int perm)
 {
-    if (!this->initialized)
-        passThroughSize(this, 16*1024);
     return passThroughOpen(this, path, mode, perm);
 }
 
@@ -34,13 +32,15 @@ void fileClose(FileSource *this, Error *error)
     return passThroughClose(this, error);
 }
 
+
 FileSource *
 fileSourceNew(Filter *next)
 {
     FileSource *this = malloc(sizeof(FileSource));
     filterInit(this, &passThroughInterface, next);
 
-    passThroughSize(this, 16*1024); // TODO: ????
+    this->filter.writeSize = 16*1024;   // Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary.
+    this->filter.readSize = passThroughSize(this, 16*1024);
 
     return this;
 }
