@@ -9,7 +9,7 @@
 
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
-    Filter filter;                                                  /* first in every Filter. */
+    Stage  Stage;                                                  /* first in every  Stage. */
     int fd;                                                         /* The file descriptor for the currrently open file. */
     bool writable;                                                  /* Can we write to the file? */
     bool readable;                                                  /* Can we read from the file? */
@@ -17,9 +17,9 @@ struct FileSystemSink {
     size_t blockSize;
 };
 
-static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
-static Error errorCantRead = (Error){.code=errorCodeFilter, .msg="Reading from file opened as writeonly"};
-static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered read was smaller than block size"};
+static Error errorCantWrite = (Error){.code= errorCodePipeline, .msg="Writing to file opened as readonly"};
+static Error errorCantRead = (Error){.code= errorCodePipeline, .msg="Reading from file opened as writeonly"};
+static Error errorReadTooSmall = (Error){.code= errorCodePipeline, .msg="unbuffered read was smaller than block size"};
 
 Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
@@ -87,9 +87,9 @@ void fileSystemSync(FileSystemSink *this, Error *error)
 
 size_t fileSystemSize(FileSystemSink *this, size_t size)
 {
-    this->filter.writeSize = size;
-    this->filter.readSize = 16*1024;
-    return this->filter.readSize;
+    this-> Stage.writeSize = size;
+    this-> Stage.readSize = 16*1024;
+    return this-> Stage.readSize;
 }
 
 void fileSystemAbort(FileSystemSink *this, Error *errorO)
@@ -98,9 +98,9 @@ void fileSystemAbort(FileSystemSink *this, Error *errorO)
 }
 
 
-FilterInterface fileSystemInterface = (FilterInterface)
+ StageInterface fileSystemInterface = ( StageInterface)
 {
-    .fnOpen = (FilterOpen)fileSystemOpen,
+    .fnOpen = ( StageOpen)fileSystemOpen,
     .fnWrite = (FilterWrite)fileSystemWrite,
     .fnRead = (FilterRead)fileSystemRead,
     .fnClose = (FilterClose)fileSystemClose,
@@ -109,15 +109,15 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnAbort = (FilterAbort)fileSystemAbort,
 };
 
-Filter *fileSystemSinkNew()
+Stage *fileSystemSinkNew()
 {
     FileSystemSink *this = malloc(sizeof(FileSystemSink));
     *this = (FileSystemSink)
     {
         .fd = -1,
-        .filter = (Filter){
+        .filter = (Stage){
             .iface=&fileSystemInterface,
             .next=NULL}
     };
-    return (Filter *)this;
+    return (Stage *)this;
 }

@@ -4,10 +4,10 @@
 
 #ifndef UNTITLED1_PASSTHROUGH_H
 #define UNTITLED1_PASSTHROUGH_H
-#include "filter.h"
+#include " Stage.h"
 
-extern FilterInterface passThroughInterface;
-#define passThrough(Event, this, ...)   ((Filter*)this)->next##Event->iface->fn##Event(((Filter*)this)->next##Event, __VA_ARGS__)
+extern  StageInterface passThroughInterface;
+#define passThrough(Event, this, ...)   (( Stage*)this)->next##Event->iface->fn##Event((( Stage*)this)->next##Event, __VA_ARGS__)
 #define passThroughOpen(this, path, mode, perm) passThrough(Open, this, path, mode, perm)
 #define passThroughRead(this, buf, size, error) passThrough(Read, this, buf, size, error)
 #define passThroughWrite(this, buf, size, error) passThrough(Write, this, buf, size, error)

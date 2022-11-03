@@ -12,29 +12,29 @@
 #define palloc malloc
 
 /***********************************************************************************************************************************
-Filter which reconciles an input of one block size with output of a different block size.
+ Stage which reconciles an input of one block size with output of a different block size.
 It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
 ***********************************************************************************************************************************/
 struct BufferStream
 {
-    Filter filter;                                                  /* Common to all filters */
+    Stage  Stage;                                                  /* Common to all  Stages */
     Buffer *buf;                                                    /* Local buffer */
     bool readable;
     bool writeable;
 };
 
 static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
+        (Error) {.code= errorCodePipeline, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
 
 size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 {
     assert(writeSize > 0);
     /* We don't change the size of data when we "transform" it. Note we don't change the data either, soit is an "identity" transform. */
-    this->filter.writeSize = writeSize;
-    this->filter.readSize = passThroughSize(this, writeSize);
+    this-> Stage.writeSize = writeSize;
+    this-> Stage.readSize = passThroughSize(this, writeSize);
 
     /* Round the buffer size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
-    size_t bufSize = sizeRoundUp(16*1024, sizeMax(this->filter.writeSize, this->filter.readSize));
+    size_t bufSize = sizeRoundUp(16*1024, sizeMax(this-> Stage.writeSize, this-> Stage.readSize));
     this->buf = bufferNew(bufSize);
 
     return 1;
@@ -49,7 +49,7 @@ bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
     if (this->readable && this->writeable)
         return errorCantBothReadWrite;
 
-    /* Pass the open request to the next filter and get the response. */
+    /* Pass the open request to the next  Stage and get the response. */
     return passThroughOpen(this, path, mode, perm);
 }
 
@@ -128,7 +128,7 @@ FilterInterface bufferStreamInterface = (FilterInterface)
 Create a new buffer filter object.
 It allocates an output buffer which matches the block size of the next filter in the pipeline.
 ***********************************************************************************************************************************/
-Filter *bufferStreamNew(Filter *next)
+Stage *bufferStreamNew(Stage *next)
 {
     BufferStream *this = palloc(sizeof(BufferStream));
 

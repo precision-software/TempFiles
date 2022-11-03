@@ -1,35 +1,35 @@
 /**
- * A Conversion Filter is a general purpose Filter for converting a stream of bytes.
- * The filter does the framework things like opening, closing, reading and writing stream data,
- * and then it invokes a generic "Converter" object to transform data.
+ * A Conversion  Stage is a general purpose  Stage for converting a stream of bytes.
+ * The  Stage does the framework things like opening, closing, reading and writing stream data,
+ * and then it invokes a generic "Filter" object to transform data.
  */
 
 #include "common/passThrough.h"
 #include "common/error.h"
-#include "common/convertFilter.h"
-#include "common/converter.h"
+#include "common/convert Stage.h"
+#include "common/filter.h"
 
 static const Error errorLZ4ContextFailed =
-        (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
+        (Error){.code= errorCodePipeline, .msg="Unable to create LZ4 context", .causedBy=NULL};
 static const Error errorLz4NeedsOutputBuffering =
-        (Error){.code=errorCodeFilter, .msg="LZ4 Compression only outputs to buffered next stage", .causedBy=NULL};
+        (Error){.code= errorCodePipeline, .msg="LZ4 Compression only outputs to buffered next stage", .causedBy=NULL};
 static const Error errorLz4BeginFailed =
-        (Error){.code=errorCodeFilter, .msg="LZ4 couldn't create header", .causedBy=NULL};
+        (Error){.code= errorCodePipeline, .msg="LZ4 couldn't create header", .causedBy=NULL};
 static const Error errorLz4FailedToCompress =
-        {.code=errorCodeFilter, .msg="LZ4 Failed to compress buffer", .causedBy=NULL};
+        {.code= errorCodePipeline, .msg="LZ4 Failed to compress buffer", .causedBy=NULL};
 static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
+        (Error) {.code= errorCodePipeline, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
 static const Error errorLz4FailedToDecompress =
-        {.code=errorCodeFilter, .msg="LZ4 Failed to decompress buffer", .causedBy=NULL};
+        {.code= errorCodePipeline, .msg="LZ4 Failed to decompress buffer", .causedBy=NULL};
 #include <sys/fcntl.h>
 
 
 /**
  *
  */
-typedef struct ConvertFilter
+typedef struct Convert Stage
 {
-    Filter filter;     /* The abstract Filter, always at front. */
+    Stage  Stage;     /* The abstract Filter, always at front. */
     bool readable;     /* Is the stream opened for reading? */
     bool writeable;    /* Is the stream opened for writing? */
     bool eof;          /* If reading, have we encountered an EOF yet? */
@@ -37,10 +37,10 @@ typedef struct ConvertFilter
     size_t bufferSize;  /* Extra buffer space if we want it. */
     Buffer *buf;        /* our buffer, big enough for either read or write. */
 
-    Converter *writeConverter;   /* the converter object to use for writing.  (eg. encryption) */
-    Converter *readConverter;    /* the converter object to use for reading.  (eg. decryption) */
+    Filter *writeFilter;   /* the filter object to use for writing.  (eg. encryption) */
+    Filter *readFilter;    /* the filter object to use for reading.  (eg. decryption) */
 
-    Converter *converter;  /* The converter object current being used. */
+    Filter *filter;  /* The filter object current being used. */
 } ConvertFilter;
 
 /**
@@ -51,11 +51,11 @@ typedef struct ConvertFilter
 size_t convertFilterSize(ConvertFilter *this, size_t writeSize)
 {
     /* Save the write size - the nr of before bytes we are moving into our buffer from prev. */
-    this->filter.writeSize = converterSize(this->writeConverter, writeSize);
+    this->filter.writeSize = filterSize(this->writeFilter, writeSize);
 
     /* Save the read size - the nr of bytes we request into our buffer from next. */
     size_t readSize = passThroughSize(this, this->filter.writeSize);
-    this->filter.readSize = converterSize(this->readConverter, readSize);
+    this->filter.readSize = filterSize(this->readFilter, readSize);
 
     /* Allocate a buffer big enough to hold reads or writes, at least as large as requested. */
     size_t size = sizeRoundUp(this->bufferSize, sizeMax(this->filter.readSize, this->filter.writeSize));
@@ -85,14 +85,14 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
     /* Go ahead and open the downstream file. */
     Error error = passThroughOpen(this, path, mode, perm);
 
-    /* Pick the read or the write converter. */
+    /* Pick the read or the write filter. */
     if (this->readable)
-        this->converter = this->readConverter;
+        this->filter = this->readFilter;
     else
-        this->converter = this->writeConverter;
+        this->filter = this->writeFilter;
 
-    /* Start the converter, keeping in mind it may generate data immediately. */
-    size_t actual = converterBegin(this->converter, this->buf->endData, bufferAvailSize(this->buf), &error);
+    /* Start the filter, keeping in mind it may generate data immediately. */
+    size_t actual = filterBegin(this->filter, this->buf->endData, bufferAvailSize(this->buf), &error);
     this->buf->endData += actual;
     assert(bufferValid(this->buf));
 
@@ -123,7 +123,7 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
     size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.next->readSize);
 
     /* Convert that many bytes if we can. We are active as long as some bytes are created or consumed. */
-    converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
+    filterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
 
     /* Update our buffer to reflect the input bytes we just removed. */
     this->buf->beginData += inSize;  if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
@@ -231,7 +231,7 @@ FilterInterface convertInterface = {
  * @param next - pointer to the next filter in the pipeline.
  * @return - a new conversion filter.
  */
-Filter *convertFilterNew(size_t bufferSize, Converter *writer, Converter* reader, Filter *next)
+Stage *convertFilterNew(size_t bufferSize, Converter *writer, Converter* reader, Stage *next)
 {
     ConvertFilter *this = malloc(sizeof(ConvertFilter));
     *this = (ConvertFilter) {

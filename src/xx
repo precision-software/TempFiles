@@ -15,7 +15,7 @@ rm ./common/error.h.old
 rm ./common/convertFilter.c.old
 rm ./common/buffer.c.old
 rm ./common/passThrough.h.old
-rm ./common/converter.h.old
+rm ./common/filter.h.old
 rm ./common/syscall.c.old
 rm ./common/filter.c.old
 rm ./common/buffer.h.old

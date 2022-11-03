@@ -5,7 +5,7 @@
 #include "fileSource.h"
 
 struct FileSource {
-    Filter filter;
+    Stage  Stage;
     bool initialized;
 };
 
@@ -34,13 +34,13 @@ void fileClose(FileSource *this, Error *error)
 
 
 FileSource *
-fileSourceNew(Filter *next)
+fileSourceNew(Stage *next)
 {
     FileSource *this = malloc(sizeof(FileSource));
-    filterInit(this, &passThroughInterface, next);
+     StageInit(this, &passThroughInterface, next);
 
-    this->filter.writeSize = 16*1024;   /* Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary. */
-    this->filter.readSize = passThroughSize(this, 16*1024);
+    this-> Stage.writeSize = 16*1024;   /* Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary. */
+    this-> Stage.readSize = passThroughSize(this, 16*1024);
 
     return this;
 }

@@ -3,8 +3,8 @@ Prototype Error handling.
    - Errors can be nested, with a higher level error "causedBy" a lower level error.
    - errorOK and errorEOF are allowable values.
 ***********************************************************************************************************************/
-#ifndef FILTER_ERROR_H
-#define FILTER_ERROR_H
+#ifndef  Stage_ERROR_H
+#define  Stage_ERROR_H
 
 #include <stdbool.h>
 #include <errno.h>
@@ -27,7 +27,7 @@ typedef struct Error {
 typedef enum ErrorCode {
     errorCodeOK = 0,
     errorCodeEOF,
-    errorCodeFilter
+    errorCodePipeline
 } ErrorCode;
 
 inline static bool errorIsOK(Error error) {return error.code == errorCodeOK;}
@@ -36,9 +36,11 @@ inline static bool errorIsEOF(Error error) {return error.code == errorCodeEOF; }
 inline static bool errorIsSystem(Error error) {return error.code < 0;}
 
 /* Predefined errors. */
+inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno)};}
 static const Error errorOK = {.code = errorCodeOK, .msg="OK - no error"};
 static const Error errorEOF = {.code = errorCodeEOF, .msg = "EOF"};
-inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno)};}
-static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="Not Implemented"};
 
-#endif /*FILTER_ERROR_H */
+
+static const Error errorNotImplemented = (Error){.code= errorCodePipeline, .msg="Not Implemented"};
+
+#endif /* Stage_ERROR_H */

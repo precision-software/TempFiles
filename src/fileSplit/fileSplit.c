@@ -1,15 +1,15 @@
-/* */
-/* Created by John Morris on 10/16/22. */
-/* */
+/**
+ *
+ */
 #include "common/passThrough.h"
 #include "fileSplit.h"
 
-static void closeCurrentSegment(FileSplitFilter *this, Error *error);
+static void closeCurrentSegment(FileSplit Stage *this, Error *error);
 static void openCurrentSegment(FileSplitFilter *this, Error *error);
 
 struct FileSplitFilter
 {
-    Filter filter;
+    Stage filter;
     size_t segmentSize;
     PathGetter getPath;
     void *pathData;
@@ -114,7 +114,7 @@ size_t fileSplitSize(FileSplitFilter *this, size_t writeSize)
     return this->filter.readSize;
 }
 
-static FilterInterface fileSplitInterface = {
+static PipelineInterface fileSplitInterface = {
     .fnClose = (FilterClose)fileSplitClose,
     .fnOpen = (FilterOpen)fileSplitOpen,
     .fnRead = (FilterRead)fileSplitRead,
@@ -122,7 +122,7 @@ static FilterInterface fileSplitInterface = {
     .fnSize = (FilterSize)fileSplitSize
 };
 
-Filter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, Filter *next)
+Stage *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, Stage *next)
 {
     FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
     *this = (FileSplitFilter) {

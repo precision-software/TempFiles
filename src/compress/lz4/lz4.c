@@ -3,19 +3,19 @@
 /* */
 #include <lz4frame.h>
 #include "common/convertFilter.h"
-#include "common/converter.h"
+#include "common/filter.h"
 #include "compress/lz4/lz4.h"
 
 static const Error errorLZ4ContextFailed =
-        (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
+        (Error){.code=errorCodePipeline, .msg="Unable to create LZ4 context", .causedBy=NULL};
 static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
+        (Error) {.code=errorCodePipeline, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
 
 /* Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred. */
 /* TODO: Not really static message, but will work if the LZ4 messages persist. We need to copy the message. */
 static bool isErrorLz4(size_t size, Error *error) {
     if (errorIsOK(*error) && LZ4F_isError(size))
-        *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
+        *error = (Error){.code= errorCodePipeline, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
     return isError(*error);
 }
 
@@ -54,7 +54,7 @@ size_t lz4CompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *error)
  * @param toBuf - the buffer receiving compressed data
  * @param toSizePtr - pointer to the size of the buffer, getting updated when data is compressed.
  * @param fromBuf - the buffer providing uncompressed data.
- * @param fromSizePtr - the size of the uncompressed, getting updated when data is compressed.
+ * @param fromSize - the size of the uncompressed, getting updated when data is compressed.
  * @param error - keeps track of the error status.
  */
 void lz4CompressConvert(Lz4Compress *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error)
@@ -99,7 +99,7 @@ size_t lz4CompressSize(Lz4Compress *this, size_t inSize)
 }
 
 /**
- * Release any compression resources, including the compresson converter itself.
+ * Release any compression resources, including the compresson filter itself.
  * @param error - keep track of errors.
  */
 void lz4CompressFree(Lz4Compress *this, Error *error)
@@ -112,9 +112,9 @@ void lz4CompressFree(Lz4Compress *this, Error *error)
 }
 
 /**
- * The interface allowing an Lz4Compress to be an abstract converter object.
+ * The interface allowing an Lz4Compress to be an abstract filter object.
  */
-ConverterIface lz4CompressIface =
+FilterIface lz4CompressIface =
 {
     .fnSize = (ConvertSizeFn)lz4CompressSize,
     .fnBegin = (ConvertBeginFn)lz4CompressBegin,
@@ -126,11 +126,11 @@ ConverterIface lz4CompressIface =
 /**
  * Create a new LZ4 compression object.
  */
-Converter *lz4CompressNew()
+Filter *lz4CompressNew()
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){0};
-    return converterNew(this, &lz4CompressIface);
+    return filterNew(this, &lz4CompressIface);
 }
 
 
@@ -159,7 +159,7 @@ size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *er
     return 0;
 }
 
-size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
+size_t lz4DecompressSize(Lz4Stage *this, size_t fromSize)
 {
     return 3 * fromSize;  /* Crude estimate, but doesn't need to be precise. */
 }
@@ -173,7 +173,7 @@ void lz4DecompressFree(Lz4Compress *this, Error *error)
     free(this);
 }
 
-ConverterIface lz4DecompressIface =
+FilterIface lz4DecompressIface =
 {
     .fnSize = (ConvertSizeFn)lz4DecompressSize,
     .fnBegin = (ConvertBeginFn)lz4DecompressBegin,
@@ -183,14 +183,14 @@ ConverterIface lz4DecompressIface =
 };
 
 
-Converter *lz4DecompressNew()
+Filter *lz4DecompressNew()
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){0};
-    return converterNew(this, &lz4DecompressIface);
+    return filterNew(this, &lz4DecompressIface);
 }
 
-Filter *lz4FilterNew(size_t bufferSize, Filter *next)
+Stage *lz4 StageNew(size_t bufferSize, Stage *next)
 {
-    return convertFilterNew(bufferSize, lz4CompressNew(), lz4DecompressNew(), next);
+    return convert StageNew(bufferSize, lz4CompressNew(), lz4DecompressNew(), next);
 }

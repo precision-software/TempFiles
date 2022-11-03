@@ -6,7 +6,7 @@
 #include "lz4_internal.h"
 #include "common/buffer.h"
 #include "common/passThrough.h"
-#include "common/filter.h"
+#include "common/stage.h"
 
 Error
 lz4DecompressOpen(Lz4Filter *this, char *path, int mode, int perm)

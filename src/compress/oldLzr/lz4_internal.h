@@ -7,7 +7,7 @@
 
 #include "common/buffer.h"
 #include "common/passThrough.h"
-#include "common/filter.h"
+#include "common/stage.h"
 #include "lz4.h"
 
 

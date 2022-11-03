@@ -4,7 +4,7 @@
 
 #ifndef FILTER_LZ4_H
 #define FILTER_LZ4_H
-#include "common/filter.h"
+#include "common/stage.h"
 
 typedef struct Lz4Filter Lz4Filter;
 

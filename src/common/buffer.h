@@ -2,8 +2,8 @@
 /* Created by John Morris on 10/11/22. */
 /* */
 
-#ifndef FILTER_BUFFER_H
-#define FILTER_BUFFER_H
+#ifndef  Stage_BUFFER_H
+#define  Stage_BUFFER_H
 
 
 #include <stddef.h>
@@ -98,7 +98,7 @@ writeByte(Buffer *this, Byte byte)
 
 Buffer *bufferNew(size_t size);
 void bufferFree(Buffer *this);
-void bufferForceFlush(Buffer *this, void *filter, Error *error);
+void bufferForceFlush(Buffer *this, void * Stage, Error *error);
 void bufferFlush(Buffer *this, void *filter, Error *error);
 void bufferFill(Buffer *this, void *filter, Error *error);
 

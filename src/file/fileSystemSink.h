@@ -5,9 +5,9 @@
 #ifndef UNTITLED1_FILESYSTEMSINK_H
 #define UNTITLED1_FILESYSTEMSINK_H
 
-#include "common/filter.h"
+#include "common/ Stage.h"
 
 typedef struct FileSystemSink FileSystemSink;
-Filter *fileSystemSinkNew(void);
+Stage *fileSystemSinkNew(void);
 
 #endif /*UNTITLED1_FILESYSTEMSINK_H */

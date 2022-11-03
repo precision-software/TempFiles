@@ -5,9 +5,9 @@
 #ifndef UNTITLED1_BufferStream_H
 #define UNTITLED1_BufferStream_H
 
-#include "common/filter.h"
+#include "common/ Stage.h"
 
 typedef struct BufferStream BufferStream;
-Filter *bufferStreamNew(Filter *next);
+Stage *bufferStreamNew(Stage *next);
 
 #endif /*UNTITLED1_BufferStream_H */

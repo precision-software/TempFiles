@@ -6,16 +6,16 @@
 #include "passThrough.h"
 
 static Error notInSink =
-        (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
+        (Error){.code=errorCodePipeline, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
 
 /**
- * Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).
+ * Helper to repeatedly write to the next  Stage in the pipeline until all the data is written (or error).
  */
 size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *error)
 {
     assert ((ssize_t)bufSize > 0);
-    Filter *this = (Filter *)thisVoid;
+    Stage *this = (Stage *)thisVoid;
 
     /* Start out as though empty, and then count the bytes as we write them out. */
     size_t totalSize = 0;
@@ -36,12 +36,12 @@ size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *err
 }
 
 /**
- * Helper to repeatedly read from the next filter in the pipeline until small amount of data left to read, eof, or error.
+ * Helper to repeatedly read from the next  Stage in the pipeline until small amount of data left to read, eof, or error.
  * Our buffer must be prepared to read at least *readSize* bytes, so we stop when the remaining buffer is too small to hold them.
  */
 size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 {
-    Filter *this = (Filter*)thisVoid;
+    Stage *this = (Stage*)thisVoid;
 
     /* Start out empty, and count the bytes as we read them. */
     size_t totalSize = 0;
@@ -68,7 +68,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 /**
  * A Dummy size function, just as a placeholder.
  */
-size_t dummySize(Filter *this, size_t size)
+size_t dummySize(Stage *this, size_t size)
 {
     this->writeSize = size;
     this->readSize = passThroughSize(this, size);

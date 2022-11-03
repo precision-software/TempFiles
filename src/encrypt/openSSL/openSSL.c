@@ -23,19 +23,19 @@ static size_t openSSLError(Error *error)
 
 
 /**
- * Converter to encrypt and decrypt SSL.
+ * Filter to encrypt and decrypt SSL.
  */
-typedef struct OpenSSLConverter
+typedef struct OpenSSLFilter
 {
     EVP_CIPHER_CTX *ctx;         /* SSL context. */
     char cipher[64];             /* The name of the cipher  (not used yet) */
     Byte key[64];                /* The cipher key. */
     Byte iv[64];                 /* The initialization vector. */
     int encrypt;                 /* 1 if encrypting, 0 if decrypting, matching libcrypto. */
-} OpenSSLConverter;
+} OpenSSLFilter;
 
 
-size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, Error *error)
+size_t openSSLFilterBegin(OpenSSLFilter *this, Byte *buf, size_t bufSize, Error *error)
 {
     /* Now we can set the key and initialization vector */
     this->ctx = EVP_CIPHER_CTX_new();
@@ -48,7 +48,7 @@ size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, 
 }
 
 
-void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSize, Byte *inBuf, size_t *inSize, Error *error)
+void openSSLFilterProcess(OpenSSLFilter *this, Byte *outBuf, size_t *outSize, Byte *inBuf, size_t *inSize, Error *error)
 {
     int outlen = (int)*outSize;
     if (!EVP_CipherUpdate(this->ctx, outBuf, &outlen, inBuf, (int)*inSize))
@@ -59,7 +59,7 @@ void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSi
 }
 
 
-size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize, Error *error)
+size_t openSSLFilterEnd(OpenSSLFilter *this, Byte *outBuf, size_t outSize, Error *error)
 {
     int outlen = (int)outSize;
     if (!EVP_CipherFinal_ex(this->ctx, outBuf, &outlen))
@@ -71,7 +71,7 @@ size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize,
     return outlen;
 }
 
-void openSSLConverterFree(OpenSSLConverter *this, Error *error)
+void openSSLFilterFree(OpenSSLFilter *this, Error *error)
 {
     if (this->ctx != NULL)
         EVP_CIPHER_CTX_free(this->ctx);
@@ -79,25 +79,25 @@ void openSSLConverterFree(OpenSSLConverter *this, Error *error)
 
 }
 
-size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
+size_t openSSLFilterSize(OpenSSLFilter *this, size_t inSize)
 {
     /* OK to return larger than necessary. Add extra space for padding and checksum. */
     return inSize + 2*EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE;
 }
 
-ConverterIface openSSLConverterInterface = (ConverterIface)
+FilterIface openSSLFilterInterface = (FilterIface)
 {
-    .fnBegin = (ConvertBeginFn)openSSLConverterBegin,
-    .fnConvert = (ConvertConvertFn) openSSLConverterProcess,
-    .fnEnd = (ConvertEndFn)openSSLConverterEnd,
-    .fnFree = (ConvertFreeFn)openSSLConverterFree,
-    .fnSize = (ConvertSizeFn)openSSLConverterSize,
+    .fnBegin = (ConvertBeginFn)openSSLFilterBegin,
+    .fnConvert = (ConvertConvertFn) openSSLFilterProcess,
+    .fnEnd = (ConvertEndFn)openSSLFilterEnd,
+    .fnFree = (ConvertFreeFn)openSSLFilterFree,
+    .fnSize = (ConvertSizeFn)openSSLFilterSize,
 };
 
 
-Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)
+Filter *openSSLFilterNew(char *cipher, bool encrypt, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)
 {
-    OpenSSLConverter *this = malloc(sizeof(OpenSSLConverter));
+    OpenSSLFilter *this = malloc(sizeof(OpenSSLFilter));
 
     assert(strlen(cipher) < sizeof(this->cipher));
     assert(keyLen <= sizeof(this->key));
@@ -109,11 +109,11 @@ Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t key
     memcpy(this->key, key, keyLen);
     memcpy(this->iv, iv, ivLen);
 
-    return converterNew(this, &openSSLConverterInterface);
+    return filterNew(this, &openSSLConverterInterface);
 }
 
 
-Filter *openSSLNew(char *cipherName, Byte *key, size_t keyLen, Byte *iv, size_t ivLen, Filter *next)
+Stage *openSSLNew(char *cipherName, Byte *key, size_t keyLen, Byte *iv, size_t ivLen, Stage *next)
 {
     Converter *encrypt = openSSLConverterNew(cipherName, true, key, keyLen, iv, ivLen);
     Converter *decrypt = openSSLConverterNew(cipherName, false, key, keyLen, iv, ivLen);
