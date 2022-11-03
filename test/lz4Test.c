@@ -19,6 +19,9 @@ void testMain()
             lz4FilterNew(16*1024,
                     bufferStreamNew(
                             fileSystemSinkNew())));
+
+    singleStreamTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1048576, 1024);
+
     streamTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4");
     //compressionVerify("LZ4 Compression: verify with external utility");
 }

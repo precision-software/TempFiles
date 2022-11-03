@@ -1,6 +1,8 @@
-//
-// Created by John Morris on 10/18/22.
-//
+/**
+ * A Conversion Filter is a general purpose Filter for converting a stream of bytes.
+ * The filter does the framework things like opening, closing, reading and writing stream data,
+ * and then it invokes a generic "Converter" object to transform data.
+ */
 
 #include "common/passThrough.h"
 #include "common/error.h"
@@ -22,30 +24,53 @@ static const Error errorLz4FailedToDecompress =
 #include <sys/fcntl.h>
 
 
-
+/**
+ *
+ */
 typedef struct ConvertFilter
 {
-    Filter filter;
-    bool readable;
-    bool writeable;
-    bool eof;
+    Filter filter;     // The abstract Filter, always at front.
+    bool readable;     // Is the stream opened for reading?
+    bool writeable;    // Is the stream opened for writing?
+    bool eof;          // If reading, have we encountered an EOF yet?
 
-    size_t bufferSize;  // big enough to hold max compressed block size
-    Buffer *buf;        // our buffer.
+    size_t bufferSize;  // Extra buffer space if we want it.
+    Buffer *buf;        // our buffer, big enough for either read or write.
 
+    Converter *writeConverter;   // the converter object to use for writing.  (eg. encryption)
+    Converter *readConverter;    // the converter object to use for reading.  (eg. decryption)
 
-    Converter *writeConverter;
-    Converter *readConverter;
-
-    Converter *converter;
+    Converter *converter;  // The converter object current being used.
 } ConvertFilter;
 
-size_t convertFilterSize(ConvertFilter *this, size_t size)
+/**
+ * Estimate the size of the converted data. It is OK to overestimate, but never to underestimate.
+ * @param size - the size of the raw data
+ * @return - the size of the converted data
+ */
+size_t convertFilterSize(ConvertFilter *this, size_t writeSize)
 {
-    this->filter.writeSize = size;
-    this->filter.readSize = passThroughSize(this, converterSize(this->writeConverter, size));
-    return converterSize(this->readConverter, this->filter.readSize);
+    // Save the write size - the nr of before bytes we are moving into our buffer from prev.
+    this->filter.writeSize = converterSize(this->writeConverter, writeSize);
+
+    // Save the read size - the nr of bytes we request into our buffer from next.
+    size_t readSize = passThroughSize(this, this->filter.writeSize);
+    this->filter.readSize = converterSize(this->readConverter, readSize);
+
+    // Allocate a buffer big enough to hold reads or writes, at least as large as requested.
+    size_t size = sizeRoundUp(this->bufferSize, sizeMax(this->filter.readSize, this->filter.writeSize));
+    this->buf = bufferNew(size);
+
+    return this->filter.readSize;
 }
+
+/**
+ * Open a Filtered Stream.
+ * @param path - the path or file name.
+ * @param mode - the file mode, say O_RDONLY or O_CREATE.
+ * @param perm - if creating a file, the permissions.
+ * @return - Error status.
+ */
 Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
 {
     assert(bufferValid(this->buf));
@@ -57,25 +82,26 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
     if (this->readable == this->writeable)
         return errorCantBothReadWrite;
 
-
     // Go ahead and open the downstream file.
     Error error = passThroughOpen(this, path, mode, perm);
 
-    // If reading,
+    // Pick the read or the write converter.
     if (this->readable)
         this->converter = this->readConverter;
     else
         this->converter = this->writeConverter;
 
-
-    // Start the converter
-    converterBegin(this->converter, &error);
+    // Start the converter, keeping in mind it may generate data immediately.
+    size_t actual = converterBegin(this->converter, this->buf->endData, bufferAvailSize(this->buf), &error);
+    this->buf->endData += actual;
     assert(bufferValid(this->buf));
 
     return error;
 }
 
-/* Read data from our internal buffer, placing converted data into the caller's buffer.*/
+/**
+ * Read data from our internal buffer, placing converted data into the caller's buffer.
+ */
 size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
     // First, check if we have encountered EOF on a previous read.
@@ -84,45 +110,51 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
     if (isError(*error))
         return 0;
 
-    // Read downstream data into our buffer if there is room for a full block.
-    if (bufferAvailSize(this->buf) >= this->filter.readSize) {
-        size_t actual = passThroughRead(this, this->buf->endData, bufferAvailSize(this->buf), error);
-        this->buf->endData += actual;
-    }
+    // Try to read downstream data into our buffer if it is empty.
+    bufferFill(this->buf, this, error);
 
-    // Throttle input size to the number of blocks our caller can receive. There is always at least one block requested.
-    assert(size >= this->filter.prev->readSize);  // Reads must always request at least one block.
-    size_t nrBlocks = size / this->filter.prev->readSize;  // From assertion, nrBlocks > 0.
-    size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.readSize);
+    // Figure out how much of our input we can convert into the output buffer.
+    //   Earlier, the Size function told us the size of the input and output data blocks.
+    //   (by setting this->readSize and prev->readSize)
+    //   Now we use that info to translate N blocks at a time.
+    assert(size >= this->filter.readSize);
     size_t outSize = size;
+    size_t nrBlocks = size / this->filter.readSize;
+    size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.next->readSize);
 
-    // CASE: internal buffer has data to convert, so convert multiple blocks into the callers buffer.
-    if (inSize > 0)
-        converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
+    // Convert that many bytes if we can. We are active as long as some bytes are created or consumed.
+    converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
 
-    // CASE: buffer has no data. Note this corresponds to an EOF since we just tried to fill it.
-    else
+    // Update our buffer to reflect the input bytes we just removed.
+    this->buf->beginData += inSize;  if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
+    assert(bufferValid(this->buf));
+
+    // If no bytes were processed, and we had an EOF ...
+    if (outSize == 0 && inSize == 0 && errorIsEOF(*error))
     {
-        // Temporarily ignore the EGF
-        this->eof = errorIsEOF(*error);
-        if (this->eof)
-            *error = errorOK;
+        // Temporarily ignore the EOF
+        *error = errorOK;
+        this->eof = true;
 
-        // Dump out any internal data into the output buffer.
-        outSize = converterEnd(this->converter, buf, outSize, error);
+        // Dump out any trailing data into the output buffer.
+        outSize = converterEnd(this->converter, buf, size, error);
 
         // If there isn't any new data, then restore the EOF condition.
-        if (outSize == 0 && this->eof && errorIsOK(*error))
+        if (this->eof && outSize == 0)
             *error = errorEOF;
     }
 
-    // Update the buffer to reflect the bytes that were actually copied out of our internal buffer.
-    this->buf->beginData+=inSize; if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
-    assert(bufferValid(this->buf));
+    // Return the number of bytes read.
     return outSize;
 }
 
-/* Write converted data into our internal buffer, flushing as needed. */
+/**
+ * Write converted data into our internal buffer, flushing as needed.
+ *   @param buf - data to be converted.
+ *   @param size - number of bytes to be converted.
+ *   @param error - error status, both input and output.
+ *   @returns - number of bytes actually used.
+ */
 size_t convertFilterWrite(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
     assert(bufferValid(this->buf));
@@ -132,23 +164,25 @@ size_t convertFilterWrite(ConvertFilter *this, Byte *buf, size_t size, Error *er
         bufferForceFlush(this->buf, this, error);
 
     // Limit the input size to the number of output blocks we can fit into our buffer.
+    //   The earlier "Size" event helped us determine the size of the input and output blocks.
     size_t outSize = bufferAvailSize(this->buf);
     size_t nrBlocks = outSize / this->filter.writeSize;
-    size_t inSize = sizeMin(size, nrBlocks * this->filter.prev->writeSize);
+    size_t inSize = sizeMin(size, nrBlocks * this->filter.next->writeSize);
 
     // Convert the data.
-    size_t temp = outSize;
     converterProcess(this->converter, this->buf->endData, &outSize, buf, &inSize, error);
-    assert(outSize <= temp);
 
     // Update the buffer to reflect the bytes that were actually added to our internal buf.
     this->buf->endData+=outSize;
-
     assert(bufferValid(this->buf));
 
     return inSize;
 }
 
+/**
+ * Close this conversion filter, cleaning up and flushing any data not yet output.
+ * @param error - error status
+ */
 void convertFilterClose(ConvertFilter *this, Error *error)
 {
     assert(bufferValid(this->buf));
@@ -168,13 +202,19 @@ void convertFilterClose(ConvertFilter *this, Error *error)
         bufferForceFlush(this->buf, this, error);
     }
 
+    // Notify the downstream objects they must close as well.
+    passThroughClose(this, error);
+
+    // Make note it is closed.
     this->readable = this->writeable = false;
     this->converter = NULL;
-    passThroughClose(this, error);
+
     assert(bufferValid(this->buf));
 }
 
-
+/**
+ * Abstract interface for the conversion filter.
+ */
 FilterInterface convertInterface = {
         .fnOpen = (FilterOpen) convertFilterOpen,
         .fnRead = (FilterRead) convertFilterRead,
@@ -183,23 +223,33 @@ FilterInterface convertInterface = {
         .fnSize = (FilterSize) convertFilterSize,
 };
 
+/**
+ * Create a new conversion filter.
+ * @param bufferSize - the suggested size of the data buffers used for conversion.
+ * @param writer - the converter used for output (writing).
+ * @param reader - the converter used of input (reading)
+ * @param next - pointer to the next filter in the pipeline.
+ * @return - a new conversion filter.
+ */
 Filter *convertFilterNew(size_t bufferSize, Converter *writer, Converter* reader, Filter *next)
 {
     ConvertFilter *this = malloc(sizeof(ConvertFilter));
     *this = (ConvertFilter) {
             .bufferSize = bufferSize,
             .writeConverter = writer,
-            .readConverter = reader,
-            .buf = bufferNew(bufferSize)
+            .readConverter = reader
     };
 
     return filterInit(this, &convertInterface, next);
 }
 
-
+/**
+ * Release a conversion filter and its resources.
+ * @param error
+ */
 void conversionFilterFree(ConvertFilter *this, Error *error)
 {
     converterFree(this->readConverter, error); this->readConverter = NULL;
     converterFree(this->writeConverter, error); this->writeConverter = NULL;
-
+    free(this);
 }

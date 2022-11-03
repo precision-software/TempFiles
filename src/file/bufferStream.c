@@ -101,6 +101,8 @@ void bufferStreamClose(BufferStream *this, Error *error)
 
     // Pass on the close request.,
     passThroughClose(this, error);
+
+    this->readable = this->writeable = false;
 }
 
 void bufferStreamSync(BufferStream *this, Error *error)

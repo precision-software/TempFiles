@@ -2,10 +2,6 @@
 // Created by John Morris on 10/20/22.
 //
 
-//
-// Created by John Morris on 10/20/22.
-//
-
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
@@ -14,58 +10,60 @@
 
 static const Error errorBadKeyLen = (Error){.code=errorCodeFilter, .msg="Unexpected Key or IV length."};
 static const Error errorBadDecryption = (Error) {.code=errorCodeFilter, .msg="Unable to decrypt current buffer"};
-static Error openSSLError(void) {return (Error){.code=errorCodeFilter, .msg=ERR_error_string(ERR_get_error(), NULL)};}
+
+/**
+ * Convenience function to build an SSL error and return zero.
+ */
+static size_t openSSLError(Error *error)
+{
+    if (errorIsOK(*error))
+        *error = (Error){.code=errorCodeFilter, .msg=ERR_error_string(ERR_get_error(), NULL)};
+    return 0;
+}
 
 
+/**
+ * Structure to encrypt and decrypt SSL.
+ */
 typedef struct OpenSSLConverter
 {
-    EVP_CIPHER_CTX *ctx;
-    char cipher[64];
-    Byte key[64];
-    Byte iv[64];
-    int encrypt;
+    EVP_CIPHER_CTX *ctx;         // SSL context.
+    char cipher[64];             // The name of the cipher  (not used yet)
+    Byte key[64];                // The cipher key.
+    Byte iv[64];                 // The initialization vector.
+    int encrypt;                 // 1 if encrypting, 0 if decrypting, matching libcrypto.
 } OpenSSLConverter;
 
-// Note: generates prelude, but doesn't consume it.
-size_t openSSLConverterBegin(OpenSSLConverter *this, Error *error)
-{
-    if (isError(*error)) return 0;
 
+size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, Error *error)
+{
     /* Now we can set the key and initialization vector */
     this->ctx = EVP_CIPHER_CTX_new();
     const EVP_CIPHER *cipher = EVP_aes_256_cbc(); // TODO: look up cipher, add error handling.
 
     if (!EVP_CipherInit_ex2(this->ctx, cipher, this->key, this->iv, this->encrypt, NULL))
-        *error = openSSLError();
+        return openSSLError(error);
 
     return 0;
 }
+
 
 void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSize, Byte *inBuf, size_t *inSize, Error *error)
 {
     int outlen = (int)*outSize;
     if (!EVP_CipherUpdate(this->ctx, outBuf, &outlen, inBuf, (int)*inSize))
-    {
-        *error = openSSLError();
-        *inSize = *outSize = 0;
-        return;
-    }
+        return (void)openSSLError(error);
 
-    // We assume the entire buffer was converted, so inSize doesn't change.
+    // We assume the entire buffer was converted, so inSize is already set.
     *outSize = outlen;
 }
 
 // Note: generates trailer, but doesn't consume it.
 size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize, Error *error)
 {
-    if (isError(*error)) return 0;
-
     int outlen = (int)outSize;
     if (!EVP_CipherFinal_ex(this->ctx, outBuf, &outlen))
-    {
-        *error = openSSLError();
-        return 0;
-    }
+       return openSSLError(error);
 
     EVP_CIPHER_CTX_free(this->ctx);
     this->ctx = NULL;
@@ -88,13 +86,13 @@ size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
 }
 
 ConverterIface openSSLConverterInterface = (ConverterIface)
-        {
-                .fnBegin = (ConvertBeginFn)openSSLConverterBegin,
-                .fnConvert = (ConvertConvertFn) openSSLConverterProcess,
-                .fnEnd = (ConvertEndFn)openSSLConverterEnd,
-                .fnFree = (ConvertFreeFn)openSSLConverterFree,
-                .fnSize = (ConvertSizeFn)openSSLConverterSize,
-        };
+{
+    .fnBegin = (ConvertBeginFn)openSSLConverterBegin,
+    .fnConvert = (ConvertConvertFn) openSSLConverterProcess,
+    .fnEnd = (ConvertEndFn)openSSLConverterEnd,
+    .fnFree = (ConvertFreeFn)openSSLConverterFree,
+    .fnSize = (ConvertSizeFn)openSSLConverterSize,
+};
 
 
 Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)

@@ -16,7 +16,7 @@ converterNew()
 #include "common/error.h"
 
 
-typedef size_t (*ConvertBeginFn) (void *this, Error *error);
+typedef size_t (*ConvertBeginFn) (void *this, Byte *buf, size_t bufSize, Error *error);
 typedef size_t (*ConvertSizeFn)(void *this, size_t size);
 typedef void (*ConvertConvertFn)(void *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error);
 typedef size_t (*ConvertEndFn)(void *this, Byte *toBuf, size_t toSize, Error *error);
@@ -44,13 +44,14 @@ static inline Converter *converterNew(void *converter, ConverterIface *iface)
     return this;
 }
 
-static inline size_t converterBegin(Converter *this, Error *error)
+static inline size_t converterBegin(Converter *this, Byte *buf, size_t size, Error *error)
 {
     if (isError(*error))
         return 0;
 
-    return this->iface->fnBegin(this->converter, error);
+    return this->iface->fnBegin(this->converter, buf, size, error);
 }
+
 static inline size_t converterSize(Converter *this, size_t fromSize)
 {
     return this->iface->fnSize(this->converter, fromSize);
@@ -68,6 +69,7 @@ converterProcess(Converter *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, si
         *fromSize = 0;
     }
 }
+
 
 static inline size_t converterEnd(Converter *this, Byte *toBuf, size_t toSize, Error *error)
 {
