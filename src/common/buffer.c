@@ -2,8 +2,8 @@
 // Created by John Morris on 10/11/22.
 //
 
-#include "buffer.h"
-#include "passThrough.h"
+#include "common/buffer.h"
+#include "common/passThrough.h"
 
 
 /***********************************************************************************************************************************

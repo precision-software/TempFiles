@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/20/22.
-//
+/*
+ *
+ */
 
 #include <openssl/evp.h>
 #include <openssl/err.h>
@@ -11,7 +11,7 @@
 static const Error errorBadKeyLen = (Error){.code=errorCodeFilter, .msg="Unexpected Key or IV length."};
 static const Error errorBadDecryption = (Error) {.code=errorCodeFilter, .msg="Unable to decrypt current buffer"};
 
-/**
+/*
  * Convenience function to build an SSL error and return zero.
  */
 static size_t openSSLError(Error *error)
@@ -23,7 +23,7 @@ static size_t openSSLError(Error *error)
 
 
 /**
- * Structure to encrypt and decrypt SSL.
+ * Converter to encrypt and decrypt SSL.
  */
 typedef struct OpenSSLConverter
 {
@@ -58,7 +58,7 @@ void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSi
     *outSize = outlen;
 }
 
-// Note: generates trailer, but doesn't consume it.
+
 size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize, Error *error)
 {
     int outlen = (int)outSize;
