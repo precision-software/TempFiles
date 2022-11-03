@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/15/22.
-//
+/* */
+/* Created by John Morris on 10/15/22. */
+/* */
 
 #ifndef FILTER_SYSCALL_H
 #define FILTER_SYSCALL_H
@@ -15,4 +15,4 @@ void sys_close(int fd, Error *error);
 void sys_datasync(int fd, Error *error);
 
 
-#endif //FILTER_SYSCALL_H
+#endif /*FILTER_SYSCALL_H */

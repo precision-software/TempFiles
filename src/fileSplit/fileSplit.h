@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/16/22.
-//
+/* */
+/* Created by John Morris on 10/16/22. */
+/* */
 
 #ifndef FILTER_FILESPLIT_H
 #define FILTER_FILESPLIT_H
@@ -16,4 +16,4 @@ Filter *fileSplitFilterNew(size_t segmentSize, PathGetter pathGet, void *pathDat
 
 void formatPath(void *fmt, char *name, size_t segmentIdx, char path[PATH_MAX]);
 
-#endif //FILTER_FILESPLIT_H
+#endif /*FILTER_FILESPLIT_H */

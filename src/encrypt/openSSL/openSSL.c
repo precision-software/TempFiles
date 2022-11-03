@@ -27,11 +27,11 @@ static size_t openSSLError(Error *error)
  */
 typedef struct OpenSSLConverter
 {
-    EVP_CIPHER_CTX *ctx;         // SSL context.
-    char cipher[64];             // The name of the cipher  (not used yet)
-    Byte key[64];                // The cipher key.
-    Byte iv[64];                 // The initialization vector.
-    int encrypt;                 // 1 if encrypting, 0 if decrypting, matching libcrypto.
+    EVP_CIPHER_CTX *ctx;         /* SSL context. */
+    char cipher[64];             /* The name of the cipher  (not used yet) */
+    Byte key[64];                /* The cipher key. */
+    Byte iv[64];                 /* The initialization vector. */
+    int encrypt;                 /* 1 if encrypting, 0 if decrypting, matching libcrypto. */
 } OpenSSLConverter;
 
 
@@ -39,7 +39,7 @@ size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, 
 {
     /* Now we can set the key and initialization vector */
     this->ctx = EVP_CIPHER_CTX_new();
-    const EVP_CIPHER *cipher = EVP_aes_256_cbc(); // TODO: look up cipher, add error handling.
+    const EVP_CIPHER *cipher = EVP_aes_256_cbc(); /* TODO: look up cipher, add error handling. */
 
     if (!EVP_CipherInit_ex2(this->ctx, cipher, this->key, this->iv, this->encrypt, NULL))
         return openSSLError(error);
@@ -54,7 +54,7 @@ void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSi
     if (!EVP_CipherUpdate(this->ctx, outBuf, &outlen, inBuf, (int)*inSize))
         return (void)openSSLError(error);
 
-    // We assume the entire buffer was converted, so inSize is already set.
+    /* We assume the entire buffer was converted, so inSize is already set. */
     *outSize = outlen;
 }
 
@@ -81,7 +81,7 @@ void openSSLConverterFree(OpenSSLConverter *this, Error *error)
 
 size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
 {
-    // OK to return larger than necessary. Add extra space for padding and checksum.
+    /* OK to return larger than necessary. Add extra space for padding and checksum. */
     return inSize + 2*EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE;
 }
 

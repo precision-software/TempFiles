@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/16/22.
-//
+/* */
+/* Created by John Morris on 10/16/22. */
+/* */
 #include "common/passThrough.h"
 #include "fileSplit.h"
 
@@ -14,7 +14,7 @@ struct FileSplitFilter
     PathGetter getPath;
     void *pathData;
     size_t position;
-    char name[PATH_MAX];  // Name of the file set. We could allocate it dynamically.
+    char name[PATH_MAX];  /* Name of the file set. We could allocate it dynamically. */
     int mode;
     int perm;
 };
@@ -29,7 +29,7 @@ Error fileSplitOpen(FileSplitFilter *this, char *name, int mode, int perm)
         return errorPathTooLong;
     strcpy(this->name, name);
 
-    // Position at the beginning of the first segment, creating it if writing.
+    /* Position at the beginning of the first segment, creating it if writing. */
     this->position = 0;
     Error error = errorOK;
     openCurrentSegment(this, &error);
@@ -41,16 +41,16 @@ size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error
 {
     if (isError(*error)) return 0;
 
-    // If crossing segment boundary, then truncate to the end of segment.
+    /* If crossing segment boundary, then truncate to the end of segment. */
     size_t start = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
-    // Read the possibly truncated buffer.
+    /* Read the possibly truncated buffer. */
     size_t actual = passThroughRead(this, buf, truncSize, error);
     this->position += actual;
 
-    // If we just finished reading an entire segment, advance to the next segment.
-    //    Note we always have a partial segment at the end of the sequence, so we aren't at the end yet.
+    /* If we just finished reading an entire segment, advance to the next segment. */
+    /*    Note we always have a partial segment at the end of the sequence, so we aren't at the end yet. */
     if (start + actual == this->segmentSize)
         openCurrentSegment(this, error);
 
@@ -61,16 +61,16 @@ size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *erro
 {
     if (isError(*error)) return 0;
 
-    // If crossing segment boundary, then truncate to the end of segment.
+    /* If crossing segment boundary, then truncate to the end of segment. */
     size_t start = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
-    // Write the possibly truncated buffer.
+    /* Write the possibly truncated buffer. */
     size_t actual = passThroughWrite(this, buf, truncSize, error);
     this->position += actual;
 
-    // If we have filled the current segment, then open up the next segment.
-    //  Note we must always end the sequence with a partial segment, even if it is zero length.
+    /* If we have filled the current segment, then open up the next segment. */
+    /*  Note we must always end the sequence with a partial segment, even if it is zero length. */
     if (start + actual == this->segmentSize)
         openCurrentSegment(this, error);
 
@@ -92,18 +92,18 @@ static void closeCurrentSegment(FileSplitFilter *this, Error *error)
 
 static void openCurrentSegment(FileSplitFilter *this, Error *error)
 {
-    // Start by closing the current segment, of it was opened.
+    /* Start by closing the current segment, of it was opened. */
     closeCurrentSegment(this, error);
     if (isError(*error))
         return;
 
-    // Generate the path to the new file segment.
+    /* Generate the path to the new file segment. */
     size_t segmentIdx = this->position / this->segmentSize;
     char path[PATH_MAX];
     this->getPath(this->pathData, this->name, segmentIdx, path);
 
-    // Open the new file segment.
-    // Note if we exit now, the last file will be zero length, which will be read back as an EOF.
+    /* Open the new file segment. */
+    /* Note if we exit now, the last file will be zero length, which will be read back as an EOF. */
     *error = passThroughOpen(this, path, this->mode, this->perm);
 }
 

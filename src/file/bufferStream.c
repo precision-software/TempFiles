@@ -29,11 +29,11 @@ static const Error errorCantBothReadWrite =
 size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 {
     assert(writeSize > 0);
-    // We don't change the size of data when we "transform" it. Note we don't change the data either, soit is an "identity" transform.
+    /* We don't change the size of data when we "transform" it. Note we don't change the data either, soit is an "identity" transform. */
     this->filter.writeSize = writeSize;
     this->filter.readSize = passThroughSize(this, writeSize);
 
-    // Round the buffer size up to match the basic block sizes. We can be larger, so just pick the bigger of the two.
+    /* Round the buffer size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
     size_t bufSize = sizeRoundUp(16*1024, sizeMax(this->filter.writeSize, this->filter.readSize));
     this->buf = bufferNew(bufSize);
 
@@ -43,13 +43,13 @@ size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 Error
 bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 {
-    // We support I/O in only one direction per open.
+    /* We support I/O in only one direction per open. */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
     if (this->readable && this->writeable)
         return errorCantBothReadWrite;
 
-    // Pass the open request to the next filter and get the response.
+    /* Pass the open request to the next filter and get the response. */
     return passThroughOpen(this, path, mode, perm);
 }
 
@@ -59,15 +59,15 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
     if (!errorIsOK(*error))
         return 0;
 
-    // If our buffer is empty and our write is larger than a single block, avoid the capy and pass it on directly.
+    /* If our buffer is empty and our write is larger than a single block, avoid the capy and pass it on directly. */
     size_t nextBlockSize = this->filter.next->writeSize;
     if (bufferIsEmpty(this->buf) && bufSize >= nextBlockSize)
         return passThroughWrite(this, buf, bufSize, error);
 
-    // Copy data into the buffer.
+    /* Copy data into the buffer. */
     size_t actualSize = copyToBuffer(this->buf, buf, bufSize);
 
-    // Flush the buffer if full, attributing any errors to our write request.
+    /* Flush the buffer if full, attributing any errors to our write request. */
     bufferFlush(this->buf, this, error);
 
     return actualSize;
@@ -78,28 +78,28 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
     if (!errorIsOK(*error))
         return 0;
 
-    // If our buffer is empty and the read is more than our block size, avoid the copy and read it directly to our caller.
+    /* If our buffer is empty and the read is more than our block size, avoid the copy and read it directly to our caller. */
     if (bufferIsEmpty(this->buf) && bufSize >= this->filter.readSize)
         return passThroughRead(this, buf, bufSize, error);
 
-    // If buffer is empty, fetch some more data, attributing errors to our read request.
+    /* If buffer is empty, fetch some more data, attributing errors to our read request. */
     bufferFill(this->buf, this, error);
 
-    // Check for error while filling buffer.
+    /* Check for error while filling buffer. */
     if (isError(*error))
         return 0;
 
-    // Copy data from buffer since all is OK;
+    /* Copy data from buffer since all is OK; */
     return copyFromBuffer(this->buf, buf, bufSize);
 }
 
 
 void bufferStreamClose(BufferStream *this, Error *error)
 {
-    // Flush our buffers.
+    /* Flush our buffers. */
     bufferForceFlush(this->buf, this, error);
 
-    // Pass on the close request.,
+    /* Pass on the close request., */
     passThroughClose(this, error);
 
     this->readable = this->writeable = false;
@@ -107,10 +107,10 @@ void bufferStreamClose(BufferStream *this, Error *error)
 
 void bufferStreamSync(BufferStream *this, Error *error)
 {
-    // Flush our buffers.
+    /* Flush our buffers. */
     bufferForceFlush(this->buf, this, error);
 
-    // Pass on the sync request
+    /* Pass on the sync request */
     passThroughSync(this, error);
 }
 

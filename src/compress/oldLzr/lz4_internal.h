@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/15/22.
-//
+/* */
+/* Created by John Morris on 10/15/22. */
+/* */
 
 #ifndef FILTER_LZ4_INTERNAL_H
 #define FILTER_LZ4_INTERNAL_H
@@ -16,12 +16,12 @@ struct Lz4Filter
     Filter filter;
     bool readable;
     bool writeable;
-    size_t blockSize;   // uncompressed block size
-    size_t bufferSize;  // big enough to hold max compressed block size
-    Buffer *buf;        // our buffer.
-    LZ4F_preferences_t preferences;  // Choices for compression.
-    LZ4F_cctx *cctx;    // Pointer to an LZ4 context structure, managed by the lz4 library.
-    LZ4F_dctx *dctx;    // Pointer to an LZ4 context structure, managed by the lz4 library.
+    size_t blockSize;   /* uncompressed block size */
+    size_t bufferSize;  /* big enough to hold max compressed block size */
+    Buffer *buf;        /* our buffer. */
+    LZ4F_preferences_t preferences;  /* Choices for compression. */
+    LZ4F_cctx *cctx;    /* Pointer to an LZ4 context structure, managed by the lz4 library. */
+    LZ4F_dctx *dctx;    /* Pointer to an LZ4 context structure, managed by the lz4 library. */
 };
 
 extern FilterInterface lz4Interface;
@@ -39,12 +39,12 @@ static const Error errorCantBothReadWrite =
 static const Error errorLz4FailedToDecompress =
         {.code=errorCodeFilter, .msg="LZ4 Failed to decompress buffer", .causedBy=NULL};
 
-// TODO: Not really static, but will work if the LZ4 messages persist.
+/* TODO: Not really static, but will work if the LZ4 messages persist. */
 static Error errorLZ4(size_t size) {
     if (!LZ4F_isError(size)) return errorOK; return (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
 }
 
-// Forward References.
+/* Forward References. */
 Error lz4CompressOpen(Lz4Filter *this, char *path, int mode, int perm);
 void lz4CompressClose(Lz4Filter *this, Error *error);
 Error lz4DecompressOpen(Lz4Filter *this, char *path, int mode, int perm);
@@ -52,4 +52,4 @@ void lz4DecompressClose(Lz4Filter *this, Error *error);
 size_t lz4CompressWrite(Lz4Filter *this, Byte *buf, size_t size, Error *error);
 size_t lz4DecompressRead(Lz4Filter *this, Byte *buf, size_t size, Error *error);
 
-#endif //FILTER_LZ4_INTERNAL_H
+#endif /*FILTER_LZ4_INTERNAL_H */

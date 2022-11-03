@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 9/24/22.
-//
+/* */
+/* Created by John Morris on 9/24/22. */
+/* */
 
 #include "common/filter.h"
 #include "common/passThrough.h"
@@ -14,7 +14,7 @@
 
 Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
 {
-    // Link us up with our successor, and link our sucessor with us.
+    /* Link us up with our successor, and link our sucessor with us. */
     Filter *this = thisVoid;
     *this = (Filter){.next = next, .iface = iface};
     this->next->prev = this;
@@ -27,7 +27,7 @@ Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
     this->nextAbort = getNext(Abort, this);
     this->nextSize = getNext(Size, this);
 
-    // Each filter must provide a "Size" routine in its interface.
+    /* Each filter must provide a "Size" routine in its interface. */
     assert(this->iface->fnSize != NULL);
 
     return this;

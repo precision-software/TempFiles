@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/12/22.
-//
+/* */
+/* Created by John Morris on 10/12/22. */
+/* */
 #include "common/passThrough.h"
 #include "fileSource.h"
 
@@ -39,7 +39,7 @@ fileSourceNew(Filter *next)
     FileSource *this = malloc(sizeof(FileSource));
     filterInit(this, &passThroughInterface, next);
 
-    this->filter.writeSize = 16*1024;   // Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary.
+    this->filter.writeSize = 16*1024;   /* Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary. */
     this->filter.readSize = passThroughSize(this, 16*1024);
 
     return this;

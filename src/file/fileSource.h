@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/12/22.
-//
+/* */
+/* Created by John Morris on 10/12/22. */
+/* */
 
 #ifndef FILTER_FILESOURCE_H
 #define FILTER_FILESOURCE_H
@@ -25,4 +25,4 @@ void filePut1(FileSource *this, Byte b, Error *error);
 void filePut2(FileSource *this, u_int16_t u, Error *error);
 void filePut4(FileSource *this, u_int32_t u, Error *error);
 
-#endif //FILTER_FILESOURCE_H
+#endif /*FILTER_FILESOURCE_H */

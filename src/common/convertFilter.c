@@ -29,18 +29,18 @@ static const Error errorLz4FailedToDecompress =
  */
 typedef struct ConvertFilter
 {
-    Filter filter;     // The abstract Filter, always at front.
-    bool readable;     // Is the stream opened for reading?
-    bool writeable;    // Is the stream opened for writing?
-    bool eof;          // If reading, have we encountered an EOF yet?
+    Filter filter;     /* The abstract Filter, always at front. */
+    bool readable;     /* Is the stream opened for reading? */
+    bool writeable;    /* Is the stream opened for writing? */
+    bool eof;          /* If reading, have we encountered an EOF yet? */
 
-    size_t bufferSize;  // Extra buffer space if we want it.
-    Buffer *buf;        // our buffer, big enough for either read or write.
+    size_t bufferSize;  /* Extra buffer space if we want it. */
+    Buffer *buf;        /* our buffer, big enough for either read or write. */
 
-    Converter *writeConverter;   // the converter object to use for writing.  (eg. encryption)
-    Converter *readConverter;    // the converter object to use for reading.  (eg. decryption)
+    Converter *writeConverter;   /* the converter object to use for writing.  (eg. encryption) */
+    Converter *readConverter;    /* the converter object to use for reading.  (eg. decryption) */
 
-    Converter *converter;  // The converter object current being used.
+    Converter *converter;  /* The converter object current being used. */
 } ConvertFilter;
 
 /**
@@ -50,14 +50,14 @@ typedef struct ConvertFilter
  */
 size_t convertFilterSize(ConvertFilter *this, size_t writeSize)
 {
-    // Save the write size - the nr of before bytes we are moving into our buffer from prev.
+    /* Save the write size - the nr of before bytes we are moving into our buffer from prev. */
     this->filter.writeSize = converterSize(this->writeConverter, writeSize);
 
-    // Save the read size - the nr of bytes we request into our buffer from next.
+    /* Save the read size - the nr of bytes we request into our buffer from next. */
     size_t readSize = passThroughSize(this, this->filter.writeSize);
     this->filter.readSize = converterSize(this->readConverter, readSize);
 
-    // Allocate a buffer big enough to hold reads or writes, at least as large as requested.
+    /* Allocate a buffer big enough to hold reads or writes, at least as large as requested. */
     size_t size = sizeRoundUp(this->bufferSize, sizeMax(this->filter.readSize, this->filter.writeSize));
     this->buf = bufferNew(size);
 
@@ -76,22 +76,22 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
     assert(bufferValid(this->buf));
     this->eof = false;
 
-    // We support I/O in only one direction per open.
+    /* We support I/O in only one direction per open. */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
     if (this->readable == this->writeable)
         return errorCantBothReadWrite;
 
-    // Go ahead and open the downstream file.
+    /* Go ahead and open the downstream file. */
     Error error = passThroughOpen(this, path, mode, perm);
 
-    // Pick the read or the write converter.
+    /* Pick the read or the write converter. */
     if (this->readable)
         this->converter = this->readConverter;
     else
         this->converter = this->writeConverter;
 
-    // Start the converter, keeping in mind it may generate data immediately.
+    /* Start the converter, keeping in mind it may generate data immediately. */
     size_t actual = converterBegin(this->converter, this->buf->endData, bufferAvailSize(this->buf), &error);
     this->buf->endData += actual;
     assert(bufferValid(this->buf));
@@ -104,47 +104,47 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
  */
 size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
-    // First, check if we have encountered EOF on a previous read.
+    /* First, check if we have encountered EOF on a previous read. */
     if (this->eof && errorIsOK(*error) )
         *error = errorEOF;
     if (isError(*error))
         return 0;
 
-    // Try to read downstream data into our buffer if it is empty.
+    /* Try to read downstream data into our buffer if it is empty. */
     bufferFill(this->buf, this, error);
 
-    // Figure out how much of our input we can convert into the output buffer.
-    //   Earlier, the Size function told us the size of the input and output data blocks.
-    //   (by setting this->readSize and prev->readSize)
-    //   Now we use that info to translate N blocks at a time.
+    /* Figure out how much of our input we can convert into the output buffer. */
+    /*   Earlier, the Size function told us the size of the input and output data blocks. */
+    /*   (by setting this->readSize and prev->readSize) */
+    /*   Now we use that info to translate N blocks at a time. */
     assert(size >= this->filter.readSize);
     size_t outSize = size;
     size_t nrBlocks = size / this->filter.readSize;
     size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.next->readSize);
 
-    // Convert that many bytes if we can. We are active as long as some bytes are created or consumed.
+    /* Convert that many bytes if we can. We are active as long as some bytes are created or consumed. */
     converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
 
-    // Update our buffer to reflect the input bytes we just removed.
+    /* Update our buffer to reflect the input bytes we just removed. */
     this->buf->beginData += inSize;  if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
     assert(bufferValid(this->buf));
 
-    // If no bytes were processed, and we had an EOF ...
+    /* If no bytes were processed, and we had an EOF ... */
     if (outSize == 0 && inSize == 0 && errorIsEOF(*error))
     {
-        // Temporarily ignore the EOF
+        /* Temporarily ignore the EOF */
         *error = errorOK;
         this->eof = true;
 
-        // Dump out any trailing data into the output buffer.
+        /* Dump out any trailing data into the output buffer. */
         outSize = converterEnd(this->converter, buf, size, error);
 
-        // If there isn't any new data, then restore the EOF condition.
+        /* If there isn't any new data, then restore the EOF condition. */
         if (this->eof && outSize == 0)
             *error = errorEOF;
     }
 
-    // Return the number of bytes read.
+    /* Return the number of bytes read. */
     return outSize;
 }
 
@@ -159,20 +159,20 @@ size_t convertFilterWrite(ConvertFilter *this, Byte *buf, size_t size, Error *er
 {
     assert(bufferValid(this->buf));
 
-    // Flush data to assure we have at least a full block of processed space available.
+    /* Flush data to assure we have at least a full block of processed space available. */
     if (bufferAvailSize(this->buf) < this->filter.writeSize)
         bufferForceFlush(this->buf, this, error);
 
-    // Limit the input size to the number of output blocks we can fit into our buffer.
-    //   The earlier "Size" event helped us determine the size of the input and output blocks.
+    /* Limit the input size to the number of output blocks we can fit into our buffer. */
+    /*   The earlier "Size" event helped us determine the size of the input and output blocks. */
     size_t outSize = bufferAvailSize(this->buf);
     size_t nrBlocks = outSize / this->filter.writeSize;
     size_t inSize = sizeMin(size, nrBlocks * this->filter.next->writeSize);
 
-    // Convert the data.
+    /* Convert the data. */
     converterProcess(this->converter, this->buf->endData, &outSize, buf, &inSize, error);
 
-    // Update the buffer to reflect the bytes that were actually added to our internal buf.
+    /* Update the buffer to reflect the bytes that were actually added to our internal buf. */
     this->buf->endData+=outSize;
     assert(bufferValid(this->buf));
 
@@ -188,24 +188,24 @@ void convertFilterClose(ConvertFilter *this, Error *error)
     assert(bufferValid(this->buf));
     if (isError(*error)) return;
 
-    // If we are writing, ...
+    /* If we are writing, ... */
     if (this->writeable)
     {
-        // Flush out the destination buffer, so we have room for any trailing data.
+        /* Flush out the destination buffer, so we have room for any trailing data. */
         bufferForceFlush(this->buf, this, error);
 
-        // Generate the trailing data into the now empty buffer.
+        /* Generate the trailing data into the now empty buffer. */
         size_t actual = converterEnd(this->converter, this->buf->endData, bufferAvailSize(this->buf), error);
         this->buf->endData += actual;
 
-        // Do the final flush of the data just generated.
+        /* Do the final flush of the data just generated. */
         bufferForceFlush(this->buf, this, error);
     }
 
-    // Notify the downstream objects they must close as well.
+    /* Notify the downstream objects they must close as well. */
     passThroughClose(this, error);
 
-    // Make note it is closed.
+    /* Make note it is closed. */
     this->readable = this->writeable = false;
     this->converter = NULL;
 

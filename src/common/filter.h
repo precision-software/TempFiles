@@ -55,14 +55,14 @@ Reads and Writes do not normally transfer their entire buffers in a single call.
 For both reads and writes, we can allocate a larger buffer and transform multiple basic blocks in one call.
 ***********************************************************************************************************************************/
 typedef struct Filter {
-    struct Filter *next;                                            // Points to the next filter in the pipeline
-    struct Filter *prev;                                            // Points to the previous filter in the pipeline.
-    struct FilterInterface *iface;                                  // The set of functions for processing requests.
+    struct Filter *next;                                            /* Points to the next filter in the pipeline */
+    struct Filter *prev;                                            /* Points to the previous filter in the pipeline. */
+    struct FilterInterface *iface;                                  /* The set of functions for processing requests. */
 
-    size_t  writeSize;         // max unprocessed bytes from predecessor we guarantee we can process
-    size_t  readSize;          // max processed bytes we know we can transform to predecessor with overflowing their buffer.
+    size_t  writeSize;         /* max unprocessed bytes from predecessor we guarantee we can process */
+    size_t  readSize;          /* max processed bytes we know we can transform to predecessor with overflowing their buffer. */
 
-    // Passthrough objects - cache them, so we don't have to scan ahead looking for the next filter to process the event.
+    /* Passthrough objects - cache them, so we don't have to scan ahead looking for the next filter to process the event. */
     struct Filter *nextOpen;
     struct Filter *nextRead;
     struct Filter *nextWrite;
@@ -101,4 +101,4 @@ Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
 Buffer *filterAllocateBuffer(Filter *this, size_t size);
 
 
-#endif //UNTITLED1_FILTER_H
+#endif /*UNTITLED1_FILTER_H */

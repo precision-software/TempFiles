@@ -11,16 +11,16 @@ Prototype Error handling.
 #include <string.h>
 #include <stdio.h>
 
-// This file is included everywhere, so define Byte here for now.
+/* This file is included everywhere, so define Byte here for now. */
 typedef unsigned char Byte;
 
 #define debug printf
-//#define debug (void)
+/*#define debug (void) */
 
 typedef struct Error {
-    int code;                                                       // negative is system, positive is enum.  zero is OK.
-    const char *msg;                                                // text message. (which context? static or must be freed?)
-    struct Error *causedBy;                                         // points to lower level error (or NULL) which caused this one.
+    int code;                                                       /* negative is system, positive is enum.  zero is OK. */
+    const char *msg;                                                /* text message. (which context? static or must be freed?) */
+    struct Error *causedBy;                                         /* points to nested error (or NULL) which caused this one. */
 } Error;
 
 
@@ -35,10 +35,10 @@ inline static bool isError(Error error) {return !errorIsOK(error);}
 inline static bool errorIsEOF(Error error) {return error.code == errorCodeEOF; }
 inline static bool errorIsSystem(Error error) {return error.code < 0;}
 
-// Predefined errors.
+/* Predefined errors. */
 static const Error errorOK = {.code = errorCodeOK, .msg="OK - no error"};
 static const Error errorEOF = {.code = errorCodeEOF, .msg = "EOF"};
 inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno)};}
 static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="Not Implemented"};
 
-#endif //FILTER_ERROR_H
+#endif /*FILTER_ERROR_H */

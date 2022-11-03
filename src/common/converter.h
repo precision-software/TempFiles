@@ -1,13 +1,10 @@
-/***********************************************************************************************************************************
-Converter transforms data from one buffer to another.
-
-converterBegin -
-converterProcess - process bytes from the in buffer, placing bytes in the out buffer.
-converterEnd - places any final bytes in the out buffer.
-
-
-converterFree
-converterNew()
+/**
+ * Converters transform data from one buffer to another. They have the follow lifecycle:
+ *    converterNew() - Create an abstract Converter object.
+ *    converterBegin - Initialize the Converter.
+ *    converterProcess - Process bytes from the in buffer, placing bytes in the out buffer.
+ *    converterEnd - Place any final bytes in the out buffer.
+ *    converterFree - Release all resources
  */
 
 #ifndef CONVERTER_H
@@ -86,4 +83,4 @@ static inline void converterFree(Converter *this, Error *error)
 
 
 
-#endif //CONVERTER_H
+#endif /*CONVERTER_H */

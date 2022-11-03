@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/10/22.
-//
+/* */
+/* Created by John Morris on 10/10/22. */
+/* */
 
 #ifndef UNTITLED1_BufferStream_H
 #define UNTITLED1_BufferStream_H
@@ -10,4 +10,4 @@
 typedef struct BufferStream BufferStream;
 Filter *bufferStreamNew(Filter *next);
 
-#endif //UNTITLED1_BufferStream_H
+#endif /*UNTITLED1_BufferStream_H */

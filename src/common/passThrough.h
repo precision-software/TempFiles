@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 10/10/22.
-//
+/* */
+/* Created by John Morris on 10/10/22. */
+/* */
 
 #ifndef UNTITLED1_PASSTHROUGH_H
 #define UNTITLED1_PASSTHROUGH_H
@@ -16,8 +16,8 @@ extern FilterInterface passThroughInterface;
 #define passThroughSync(this, error) passThrough(Sync, this, error)
 #define passThroughSize(this, size) passThrough(Size, this, size);
 
-// Helper function to ensure all the data is written.
+/* Helper function to ensure all the data is written. */
 size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error);
 size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
 
-#endif //UNTITLED1_PASSTHROUGH_H
+#endif /*UNTITLED1_PASSTHROUGH_H */

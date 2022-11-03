@@ -1,6 +1,6 @@
-//
-// Created by John Morris on 11/1/22.
-//
+/* */
+/* Created by John Morris on 11/1/22. */
+/* */
 #include <lz4frame.h>
 #include "common/convertFilter.h"
 #include "common/converter.h"
@@ -11,8 +11,8 @@ static const Error errorLZ4ContextFailed =
 static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
 
-// Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred.
-// TODO: Not really static message, but will work if the LZ4 messages persist. We need to copy the message.
+/* Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred. */
+/* TODO: Not really static message, but will work if the LZ4 messages persist. We need to copy the message. */
 static bool isErrorLz4(size_t size, Error *error) {
     if (errorIsOK(*error) && LZ4F_isError(size))
         *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
@@ -21,9 +21,9 @@ static bool isErrorLz4(size_t size, Error *error) {
 
 typedef struct Lz4Compress
 {
-    LZ4F_preferences_t preferences;                                 // Choices for compression.
-    LZ4F_cctx *cctx;                                                // Pointer to an LZ4 compression context.
-    LZ4F_dctx *dctx;                                                // Pointer to an LZ4 decompression context.
+    LZ4F_preferences_t preferences;                                 /* Choices for compression. */
+    LZ4F_cctx *cctx;                                                /* Pointer to an LZ4 compression context. */
+    LZ4F_dctx *dctx;                                                /* Pointer to an LZ4 decompression context. */
 } Lz4Compress;
 
 /**
@@ -35,12 +35,12 @@ typedef struct Lz4Compress
  */
 size_t lz4CompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
-    // LZ4F allocates its own context. We provide a pointer to the pointer which it then updates.
+    /* LZ4F allocates its own context. We provide a pointer to the pointer which it then updates. */
     size_t result = LZ4F_createCompressionContext(&this->cctx, LZ4F_VERSION);
     if (isErrorLz4(result, error))
         return 0;
 
-    // Generate the frame header.
+    /* Generate the frame header. */
     size_t actual = LZ4F_compressBegin(this->cctx, buf, size, &this->preferences);
     if (isErrorLz4(actual, error))
         return 0;
@@ -59,7 +59,7 @@ size_t lz4CompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *error)
  */
 void lz4CompressConvert(Lz4Compress *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error)
 {
-    // Convert the uncompressed bytes from the "fromBuf" into the "toBuf", recording any possible error.
+    /* Convert the uncompressed bytes from the "fromBuf" into the "toBuf", recording any possible error. */
     size_t toSizeSave = *toSize;
     size_t bound = LZ4F_compressBound(*fromSize, &this->preferences);
     *toSize = LZ4F_compressUpdate(this->cctx, toBuf, *toSize, fromBuf, *fromSize, NULL);
@@ -75,12 +75,12 @@ void lz4CompressConvert(Lz4Compress *this, Byte *toBuf, size_t *toSize, Byte *fr
  */
 size_t lz4CompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *error)
 {
-    // Flush remaining data and generate a frame footer if needed.
+    /* Flush remaining data and generate a frame footer if needed. */
     size_t actual = LZ4F_compressEnd(this->cctx, toBuf, toSize, NULL);
     if (isErrorLz4(actual, error))
        return 0;
 
-    // release the compression context and check for errors.
+    /* release the compression context and check for errors. */
     isErrorLz4(LZ4F_freeCompressionContext(this->cctx), error);
     this->cctx = NULL;
 
@@ -104,7 +104,7 @@ size_t lz4CompressSize(Lz4Compress *this, size_t inSize)
  */
 void lz4CompressFree(Lz4Compress *this, Error *error)
 {
-    // If not done earlier, release the compression context and check for errors.
+    /* If not done earlier, release the compression context and check for errors. */
     if (this->cctx != NULL)
         isErrorLz4(LZ4F_freeCompressionContext(this->cctx), error);
 
@@ -136,7 +136,7 @@ Converter *lz4CompressNew()
 
 size_t lz4DecompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
-    // LZ4F allocates its own context. We provide a pointer to the pointer which it then updates.
+    /* LZ4F allocates its own context. We provide a pointer to the pointer which it then updates. */
     size_t result = LZ4F_createDecompressionContext(&this->dctx, LZ4F_VERSION);
     isErrorLz4(result, error);
 
@@ -145,14 +145,14 @@ size_t lz4DecompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *erro
 
 void lz4DecompressConvert(Lz4Compress *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error)
 {
-    // Convert the uncompressed bytes from the "fromBuf" into the "toBuf". (On error, toSize and fromSize are zeroed. VERIFY!)
+    /* Convert the uncompressed bytes from the "fromBuf" into the "toBuf". (On error, toSize and fromSize are zeroed. VERIFY!) */
     size_t sizeHint = LZ4F_decompress(this->dctx, toBuf, toSize, fromBuf, fromSize, NULL);
     isErrorLz4(sizeHint, error);
 }
 
 size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *error)
 {
-    // release the compression context and check for errors.
+    /* release the compression context and check for errors. */
     isErrorLz4(LZ4F_freeDecompressionContext(this->dctx), error);
     this->dctx = NULL;
 
@@ -161,12 +161,12 @@ size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *er
 
 size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
 {
-    return 3 * fromSize;  // Crude estimate, but doesn't need to be precise.
+    return 3 * fromSize;  /* Crude estimate, but doesn't need to be precise. */
 }
 
 void lz4DecompressFree(Lz4Compress *this, Error *error)
 {
-    // If not done earlier, release the compression context and check for errors.
+    /* If not done earlier, release the compression context and check for errors. */
     if (this->cctx != NULL)
         isErrorLz4(LZ4F_freeDecompressionContext(this->dctx), error);
 
