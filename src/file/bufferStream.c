@@ -1,5 +1,6 @@
 /**
- *
+ * Filter which reconciles an input of one block size with output of a different block size.
+ * It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
  */
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
@@ -12,8 +13,7 @@
 #define palloc malloc
 
 /**
- * Filter which reconciles an input of one block size with output of a different block size.
- * It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
+ * Structure containing the state of the stream, including its buffer.
  */
 struct BufferStream
 {
@@ -28,14 +28,15 @@ static const Error errorCantBothReadWrite =
 
 /**
  * Negotiate buffer sizes needed by neighboring filters.
- * Since our purpose is to resolve block size differences, we handle
- * single byte blocks from upstream, and we match whatever
+ * Since our primary purpose is to resolve block size differences, we handle
+ * single byte blocks (or larger) from upstream, and we match whatever
  * block size is requested downstream.
  */
 size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 {
     assert(writeSize > 0);
-    /* We don't change the size of data when we "transform" it. Note we don't change the data either, soit is an "identity" transform. */
+    /* We don't change the size of data when we "transform" it. */
+    /*   Note we don't change the data either, so it is an "identity" transform. */
     this->filter.writeSize = writeSize;
     this->filter.readSize = passThroughSize(this, writeSize);
 
@@ -46,6 +47,10 @@ size_t bufferStreamSize(BufferStream *this, size_t writeSize)
     return 1;
 }
 
+
+/**
+ * Open a buffered file, either for reading or writing.
+ */
 Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 {
     /* We support I/O in only one direction per open. */
@@ -59,6 +64,9 @@ Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 }
 
 
+/**
+ * Write data to the buffered stream.
+ */
 size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* error)
 {
     if (!errorIsOK(*error))
@@ -78,6 +86,11 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
     return actualSize;
 }
 
+
+/**
+ * Read data from the buffered stream.
+ *  Note our read request must be at least as large as our successor's block size.
+ */
 size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *error)
 {
     if (!errorIsOK(*error))
@@ -99,6 +112,9 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
 }
 
 
+/**
+ * Close the buffered stream.
+ */
 void bufferStreamClose(BufferStream *this, Error *error)
 {
     /* Flush our buffers. */
@@ -110,6 +126,10 @@ void bufferStreamClose(BufferStream *this, Error *error)
     this->readable = this->writeable = false;
 }
 
+
+/**
+ * Synchronize any written data to persistent storage.
+ */
 void bufferStreamSync(BufferStream *this, Error *error)
 {
     /* Flush our buffers. */

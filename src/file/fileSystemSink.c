@@ -1,6 +1,9 @@
-/* */
-/* Created by John Morris on 10/11/22. */
-/* */
+/**
+ * FileSystemSink is the consumer of file system events, doing the actual
+ * work of opening, closing, reading and writing files.
+ * This particular sink works with a Posix file system, and it is
+ * a straightforward wrapper around Posix system calls.
+ */
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include "common/syscall.h"
@@ -9,18 +12,21 @@
 
 /* A conventional POSIX file system for reading/writing a file. */
 struct FileSystemSink {
-    Filter filter;                                                  /* first in every Filter. */
-    int fd;                                                         /* The file descriptor for the currrently open file. */
-    bool writable;                                                  /* Can we write to the file? */
-    bool readable;                                                  /* Can we read from the file? */
-    bool eof;                                                       /* Has the currently open file read past eof? */
-    size_t blockSize;
+    Filter filter;   /* first in every Filter. */
+    int fd;          /* The file descriptor for the currrently open file. */
+    bool writable;   /* Can we write to the file? */
+    bool readable;   /* Can we read from the file? */
+    bool eof;        /* Has the currently open file read past eof? */
 };
 
 static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
 static Error errorCantRead = (Error){.code=errorCodeFilter, .msg="Reading from file opened as writeonly"};
 static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered read was smaller than block size"};
 
+
+/**
+ * Open a Posix file.
+ */
 Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
     /* Check the mode we are opening the file in. */
@@ -39,34 +45,42 @@ Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
     return error;
 }
 
+
+/**
+ * Write data to a file. For efficiency, we like larger buffers,
+ * but in a pinch we can write individual bytes.
+ */
 size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
     /* Check for errors. */
     if (errorIsOK(*error) && !this->writable)
         *error = errorCantWrite;
 
-    /* Truncate large unbuffered writes to a multiple of blockSize, */
-    /* Smaller writes go through on the premise they are at the end of the file. */
-    size_t size = sizeMax(bufSize, sizeRoundDown(bufSize, this->blockSize));
-
     /* Write the data. */
-    return sys_write(this->fd, buf, size, error);
+    return sys_write(this->fd, buf, bufSize, error);
 }
 
-size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
+
+/**
+ * Read data from a file, checking for EOF. We like larger read buffers
+ * for efficiency, but they are not required.
+ */
+size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t size, Error *error)
 {
-    /* Truncate large reads to a multiple of blockSize. */
-    size_t size = bufSize; /*sizeRoundDown(bufSize, this->blockSize); */
 
     /* Check for errors. */
     if (isError(*error))                 ;
     else if (!this->readable)            *error = errorCantRead;
     else if (this->eof)                  *error = errorEOF;
-    /*else if (size < this->blockSize)     *error = errorReadTooSmall; */
 
+    // Do the actual read.
     return sys_read(this->fd, buf, size, error);
 }
 
+
+/**
+ * Close a Posix file.
+ */
 void fileSystemClose(FileSystemSink *this, Error *error)
 {
     /* Close the fd if it was opened earlier. */
@@ -74,6 +88,10 @@ void fileSystemClose(FileSystemSink *this, Error *error)
     this->fd = -1;
 }
 
+
+/**
+ * Push data which has been written out to persistent storage.
+ */
 void fileSystemSync(FileSystemSink *this, Error *error)
 {
     /* Error if file was readonly. */
@@ -85,6 +103,13 @@ void fileSystemSync(FileSystemSink *this, Error *error)
         sys_datasync(this->fd, error);
 }
 
+
+/**
+ * Negotiate the block size for reading and writing.
+ * We declare a large block size to encourage those
+ * above us to buffer, but we probably should declare
+ * a single byte and let them make their own decisions.
+ */
 size_t fileSystemSize(FileSystemSink *this, size_t size)
 {
     this->filter.writeSize = size;
@@ -92,6 +117,12 @@ size_t fileSystemSize(FileSystemSink *this, size_t size)
     return this->filter.readSize;
 }
 
+
+/**
+ * Abort file access, removing any files we may have created.
+ * This allows us to remove temporary files when a transaction aborts.
+ * Not currently implemented.
+ */
 void fileSystemAbort(FileSystemSink *this, Error *errorO)
 {
     abort(); /* TODO: not implemented. */
@@ -109,6 +140,10 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnAbort = (FilterAbort)fileSystemAbort,
 };
 
+
+/**
+ * Create a new Posix file system Sink.
+ */
 Filter *fileSystemSinkNew()
 {
     FileSystemSink *this = malloc(sizeof(FileSystemSink));
