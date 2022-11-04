@@ -2,6 +2,25 @@
  * A Conversion Filter is a general purpose Filter for converting a stream of bytes.
  * The filter itself does framework things like opening, closing, reading and writing files,
  * and it invokes the two "Converter" objects to transform the data while reading or writing.
+ *
+ * Converter objects are the hidden objects which transform data. In many cases,
+ * the size of the their input and the size of the output differs,
+ * so it is necessary to allocate properly sized buffers. Each converter
+ * object has a Size() function indicating the maximum amount of data
+ * produced for a given input.
+ *
+ * This sizing process is implemented during Filter initialization.
+ * The Size() event progresses down the pipeline, letting each filter know
+ * how large its write buffer must be, and then it returns back up the
+ * pipeline, informing each filter how large its read buffer must be.
+ *
+ * This Converter Filter has two separate size functions - one for the write
+ * converter going down the pipeline, and another for the read converter coming
+ * up the pipeline.
+ *
+ * If everybody in the pipeline respects the sizes of its neighbors,
+ * there should be never be a situation where a buffer is too small to
+ * hold data as it is converted from the neighboring filters.
  */
 
 #include "common/passThrough.h"
@@ -26,7 +45,7 @@ static const Error errorLz4FailedToDecompress =
 
 
 /**
- * A special filter for converting data. It includes two converters,
+ * A general purpose filter for converting data. It includes two converters,
  * one for reading and another for writing.
  */
 typedef struct ConvertFilter
@@ -107,18 +126,19 @@ Error convertFilterOpen(ConvertFilter *this, char *path, int mode, int perm)
 size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *error)
 {
     /* First, check if we have encountered EOF on a previous read. */
-    if (this->eof && errorIsOK(*error) )
+    if (this->eof)
+    {
         *error = errorEOF;
-    if (isError(*error))
         return 0;
+    }
 
     /* Try to read downstream data into our buffer if it is empty. */
     bufferFill(this->buf, this, error);
 
     /* Figure out how much of our input we can convert into the output buffer. */
     /*   Earlier, the Size function told us the size of the input and output data blocks. */
-    /*   (by setting this->readSize and prev->readSize) */
-    /*   Now we use that info to translate N blocks at a time. */
+    /*   (by setting readSize and writeSize) */
+    /*   Now we use that info to translate 1 or more blocks at a time. */
     assert(size >= this->filter.readSize);
     size_t outSize = size;
     size_t nrBlocks = size / this->filter.readSize;
@@ -138,7 +158,7 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
         *error = errorOK;
         this->eof = true;
 
-        /* Dump out any trailing data into the output buffer. */
+        /* Dump any trailing data into the output buffer. */
         outSize = converterEnd(this->converter, buf, size, error);
 
         /* If there isn't any new data, then restore the EOF condition. */
@@ -174,7 +194,7 @@ size_t convertFilterWrite(ConvertFilter *this, Byte *buf, size_t size, Error *er
     /* Convert the data. */
     converterProcess(this->converter, this->buf->endData, &outSize, buf, &inSize, error);
 
-    /* Update the buffer to reflect the bytes that were actually added to our internal buf. */
+    /* Update the internal buffer to reflect the bytes that were actually. */
     this->buf->endData+=outSize;
     assert(bufferValid(this->buf));
 
@@ -207,7 +227,7 @@ void convertFilterClose(ConvertFilter *this, Error *error)
     /* Notify the downstream objects they must close as well. */
     passThroughClose(this, error);
 
-    /* Make note it is closed. */
+    /* Make note this filter is closed. */
     this->readable = this->writeable = false;
     this->converter = NULL;
 

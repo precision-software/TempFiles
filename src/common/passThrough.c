@@ -1,5 +1,6 @@
 /**
- *
+ * In a pipeline of filters, these functions invoke the next
+ * filter which is able to process the event.
  */
 #include "error.h"
 #include "assert.h"

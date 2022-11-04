@@ -1,6 +1,6 @@
 /***********************************************************************************************************************************
-Prototype Error handling.
-   - Errors can be nested, so one error can show which other error "caused" it.
+Error handling.
+   - Errors can be linked, so one error can show which other error "caused" it.
    - errorOK and errorEOF are allowable values.
 
 Error handling is intended to of the "short circuit" nature, where an
@@ -8,8 +8,8 @@ error variable is both input and output to a function.
  - If the error is already set, the function should do nothing and return.
  - If an error occurs, the other return values should be benign.
 
-As a quick prototype, errors are static and contain static strings.
-To be complete, errors will need to copy their strings, but we ignore that for the moment.
+As a quick prototype, errors contain static strings.
+  In the long run, errors may need to copy their strings, but we ignore that for the moment.
 ***********************************************************************************************************************/
 #ifndef FILTER_ERROR_H
 #define FILTER_ERROR_H

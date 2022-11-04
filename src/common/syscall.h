@@ -1,7 +1,6 @@
-/* */
-/* Created by John Morris on 10/15/22. */
-/* */
-
+/**
+ * Wrappers around system calls.  TODO: move comments here from system_call.c.
+ */
 #ifndef FILTER_SYSCALL_H
 #define FILTER_SYSCALL_H
 

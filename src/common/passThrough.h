@@ -3,8 +3,11 @@
  * To avoid lots of repetition, these "event calls" are coded as macros.
  * The word "passThrough" isn't competely accurate, but it does capture
  * the idea of sending the event on to the next filter which can handle it.
+ *
+ * In practice, we cache the next downstream filter which is able to process
+ * each event, so we can dispatch directly and don't have to scan the pipeline
+ * looking for an appropriate filter.  (See filter.h)
  */
-
 #ifndef UNTITLED1_PASSTHROUGH_H
 #define UNTITLED1_PASSTHROUGH_H
 #include "filter.h"

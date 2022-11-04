@@ -1,6 +1,6 @@
-/***********************************************************************************************************************************
-
-***********************************************************************************************************************************/
+/**
+ *
+ */
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
 #include "common/error.h"
@@ -11,10 +11,10 @@
 
 #define palloc malloc
 
-/***********************************************************************************************************************************
-Filter which reconciles an input of one block size with output of a different block size.
-It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
-***********************************************************************************************************************************/
+/**
+ * Filter which reconciles an input of one block size with output of a different block size.
+ * It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
+ */
 struct BufferStream
 {
     Filter filter;                                                  /* Common to all filters */
@@ -26,6 +26,12 @@ struct BufferStream
 static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
 
+/**
+ * Negotiate buffer sizes needed by neighboring filters.
+ * Since our purpose is to resolve block size differences, we handle
+ * single byte blocks from upstream, and we match whatever
+ * block size is requested downstream.
+ */
 size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 {
     assert(writeSize > 0);
@@ -40,8 +46,7 @@ size_t bufferStreamSize(BufferStream *this, size_t writeSize)
     return 1;
 }
 
-Error
-bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
+Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 {
     /* We support I/O in only one direction per open. */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
@@ -49,7 +54,7 @@ bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
     if (this->readable && this->writeable)
         return errorCantBothReadWrite;
 
-    /* Pass the open request to the next filter and get the response. */
+    /* Pass the event to the next filter to actually open the file. */
     return passThroughOpen(this, path, mode, perm);
 }
 
