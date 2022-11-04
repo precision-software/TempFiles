@@ -1,5 +1,13 @@
 
 ## Use Cases
+
+### Testing Mermaid
+```mermaid
+flowchart LR
+   Start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]  
+   <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+   Stop[read <br> write <br> open <br> close <br> datasync]
+```
 ### fread/fwrite Replacement
 ```plantuml
 @startditaa
