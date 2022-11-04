@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.23)
 project(filter C)
 
-set(CMAKE_C_STANDARD 90)
+set(CMAKE_C_STANDARD 99)
 include_directories(src /opt/local/include test)
 link_directories(/opt/local/lib /opt/homebrew/Cellar/openssl@1.1/1.1.1q/lib)
 

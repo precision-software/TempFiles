@@ -1,7 +1,15 @@
 /***********************************************************************************************************************************
 Prototype Error handling.
-   - Errors can be nested, with a higher level error "causedBy" a lower level error.
+   - Errors can be nested, so one error can show which other error "caused" it.
    - errorOK and errorEOF are allowable values.
+
+Error handling is intended to of the "short circuit" nature, where an
+error variable is both input and output to a function.
+ - If the error is already set, the function should do nothing and return.
+ - If an error occurs, the other return values should be benign.
+
+As a quick prototype, errors are static and contain static strings.
+To be complete, errors will need to copy their strings, but we ignore that for the moment.
 ***********************************************************************************************************************/
 #ifndef FILTER_ERROR_H
 #define FILTER_ERROR_H
@@ -17,19 +25,21 @@ typedef unsigned char Byte;
 #define debug printf
 /*#define debug (void) */
 
+/* An error type which can be tested for OK or not */
 typedef struct Error {
-    int code;                                                       /* negative is system, positive is enum.  zero is OK. */
-    const char *msg;                                                /* text message. (which context? static or must be freed?) */
-    struct Error *causedBy;                                         /* points to nested error (or NULL) which caused this one. */
+    int code;                  /* negative is system, positive is enum.  zero is OK. */
+    const char *msg;           /* text message. (which context? static or must be freed?) */
+    struct Error *causedBy;    /* points to nested error (or NULL) which caused this one. */
 } Error;
 
-
+/* Some possible enum values for the error code. */
 typedef enum ErrorCode {
     errorCodeOK = 0,
     errorCodeEOF,
     errorCodeFilter
 } ErrorCode;
 
+/* Testing the type of error */
 inline static bool errorIsOK(Error error) {return error.code == errorCodeOK;}
 inline static bool isError(Error error) {return !errorIsOK(error);}
 inline static bool errorIsEOF(Error error) {return error.code == errorCodeEOF; }

@@ -1,18 +1,6 @@
-/* */
-#ifndef UNTITLED1_FILTER_H
-#define UNTITLED1_FILTER_H
-
-#include <stddef.h>
-#include <stdbool.h>
-
-#include "buffer.h"
-#define BEGIN do {
-#define END   } while (0)
-
-/***********************************************************************************************************************************
-The basic filter which serves as an abstract header for all other filter types.
-Note a filter processes events, either handling them itself or by passing them "down the line" to
-subsequent filters.
+/**
+A filter processes events, either handling them itself or by passing
+ them "down the line" to subsequent filters.
 
 Two of the events, Read and Write, implement the flow of data. As data flows from filter to filter, it may be buffered
 or transformed. Frequently, the amount of data flowing into a filter and the amount of data flowing fram a filter will
@@ -54,15 +42,33 @@ Reads and Writes do not normally transfer their entire buffers in a single call.
 
 For both reads and writes, we can allocate a larger buffer and transform multiple basic blocks in one call.
 ***********************************************************************************************************************************/
+
+#ifndef UNTITLED1_FILTER_H
+#define UNTITLED1_FILTER_H
+
+#include <stddef.h>
+#include <stdbool.h>
+
+#include "buffer.h"
+#define BEGIN do {
+#define END   } while (0)
+
+/* This structure is an abstract header which is the first element of all filter types. */
 typedef struct Filter {
-    struct Filter *next;                                            /* Points to the next filter in the pipeline */
-    struct Filter *prev;                                            /* Points to the previous filter in the pipeline. */
-    struct FilterInterface *iface;                                  /* The set of functions for processing requests. */
+    struct Filter *next;            /* Points to the next filter in the pipeline */
+    struct FilterInterface *iface;  /* The set of functions for processing requests. */
 
-    size_t  writeSize;         /* max unprocessed bytes from predecessor we guarantee we can process */
-    size_t  readSize;          /* max processed bytes we know we can transform to predecessor with overflowing their buffer. */
+    /* When our predecessor writes to us, we must be prepared to accept this many bytes */
+    size_t  writeSize;
 
-    /* Passthrough objects - cache them, so we don't have to scan ahead looking for the next filter to process the event. */
+    /* When we read from our successor, we must issue a read with at least this many bytes */
+    size_t  readSize;
+
+    /*
+     * Passthrough objects, one for each type of event.
+     * We cache a pointer to the next object which processes that event,
+     * so we don't have to scan ahead looking for them.
+     */
     struct Filter *nextOpen;
     struct Filter *nextRead;
     struct Filter *nextWrite;
@@ -73,10 +79,8 @@ typedef struct Filter {
 } Filter;
 
 /***********************************************************************************************************************************
-A set of functions a filter provides for dealing with each type of request.
+A set of functions a filter provides, one for each type of event.
 ***********************************************************************************************************************************/
-typedef void (*FilterService)(void *this, void *request);
-
 typedef Error (*FilterOpen)(void *this, char *path, int mode, int perm);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
@@ -95,10 +99,7 @@ typedef struct FilterInterface {
     FilterSize fnSize;
 } FilterInterface;
 
-
+/* Initialize the generic parts of a filter */
 Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
-
-Buffer *filterAllocateBuffer(Filter *this, size_t size);
-
 
 #endif /*UNTITLED1_FILTER_H */

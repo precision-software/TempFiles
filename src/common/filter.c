@@ -1,11 +1,10 @@
-/* */
-/* Created by John Morris on 9/24/22. */
-/* */
-
+/*
+ *
+ */
 #include "common/filter.h"
 #include "common/passThrough.h"
 
-
+/* Helper macro to find the next filter which processes a given event. */
 #define getNext(Event, this) \
     ((this->next->iface->fn##Event == NULL) \
         ? this->next->next##Event \
@@ -14,11 +13,11 @@
 
 Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
 {
-    /* Link us up with our successor, and link our sucessor with us. */
+    /* Link us up with our successor. */
     Filter *this = thisVoid;
     *this = (Filter){.next = next, .iface = iface};
-    this->next->prev = this;
 
+    /* For each event, point to the next filter which processes that event. */
     this->nextOpen = getNext(Open, this);
     this->nextRead = getNext(Read, this);
     this->nextWrite = getNext(Write, this);

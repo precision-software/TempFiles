@@ -8,7 +8,7 @@
 #include <sys/syslimits.h>
 #include "common/filter.h"
 
-typedef struct FileSplitFilter FileSplitFilter;
+
 typedef void (*PathGetter) (void *data, char *name, size_t segmentIdx, char path[PATH_MAX]);
 
 Filter *fileSplitFilterNew(size_t segmentSize, PathGetter pathGet, void *pathData, Filter *next);

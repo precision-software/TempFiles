@@ -1,13 +1,14 @@
 /**
  * A Conversion Filter is a general purpose Filter for converting a stream of bytes.
- * The filter does the framework things like opening, closing, reading and writing stream data,
- * and then it invokes a generic "Converter" object to transform data.
+ * The filter itself does framework things like opening, closing, reading and writing files,
+ * and it invokes the two "Converter" objects to transform the data while reading or writing.
  */
 
 #include "common/passThrough.h"
 #include "common/error.h"
 #include "common/convertFilter.h"
 #include "common/converter.h"
+#include "common/buffer.h"
 
 static const Error errorLZ4ContextFailed =
         (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
@@ -25,7 +26,8 @@ static const Error errorLz4FailedToDecompress =
 
 
 /**
- *
+ * A special filter for converting data. It includes two converters,
+ * one for reading and another for writing.
  */
 typedef struct ConvertFilter
 {
@@ -50,10 +52,10 @@ typedef struct ConvertFilter
  */
 size_t convertFilterSize(ConvertFilter *this, size_t writeSize)
 {
-    /* Save the write size - the nr of before bytes we are moving into our buffer from prev. */
+    /* Save the write size - the nr of bytes we are converting into our buffer from prev. */
     this->filter.writeSize = converterSize(this->writeConverter, writeSize);
 
-    /* Save the read size - the nr of bytes we request into our buffer from next. */
+    /* Save the read size - the nr of bytes we request be converted into our buffer from next. */
     size_t readSize = passThroughSize(this, this->filter.writeSize);
     this->filter.readSize = converterSize(this->readConverter, readSize);
 

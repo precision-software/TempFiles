@@ -1,18 +1,32 @@
 /**
- * Converters transform data from one buffer to another. They have the follow lifecycle:
+ * Converters transform a chunks of data from one form to another.
+ * They are typically used compress or encrypt a stream of data.
+ * In the "pipeline of filters" approach, the "ConvertFilter" is a special
+ * filter which holds two converters, one for reading and another for writing.
+ *
+ * A Converter has the following lifecycle:
  *    converterNew() - Create an abstract Converter object.
- *    converterBegin - Initialize the Converter.
- *    converterProcess - Process bytes from the in buffer, placing bytes in the out buffer.
- *    converterEnd - Place any final bytes in the out buffer.
- *    converterFree - Release all resources
+ *    converterBegin() - Initialize the Converter and place any header info in the out buffer.
+ *    converterProcess() - Process the next chunk of bytes, placing them in the out buffer.
+ *    converterEnd() - Place any final bytes in the out buffer.
+ *    converterFree() - Release all resources
+ *
+ * Converters also implement the converterSize() method, which estimates how
+ * much output can be produced by a given input. The output buffer must always
+ * have that much space available to receive output.
+ *
+ * Some error handling is implemented in the abstract wrappers, so the
+ * individual converters don't have test errors or clean up their output
+ * when an error occurs.
  */
-
 #ifndef CONVERTER_H
 #define CONVERTER_H
 
 #include "common/error.h"
 
-
+/*
+ * These are the "sub-events" which are handled by converters.
+ */
 typedef size_t (*ConvertBeginFn) (void *this, Byte *buf, size_t bufSize, Error *error);
 typedef size_t (*ConvertSizeFn)(void *this, size_t size);
 typedef void (*ConvertConvertFn)(void *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error);

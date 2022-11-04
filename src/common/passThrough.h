@@ -1,6 +1,9 @@
-/* */
-/* Created by John Morris on 10/10/22. */
-/* */
+/**
+ * A collection of functions for sending an event to the next filter in the pipeline.
+ * To avoid lots of repetition, these "event calls" are coded as macros.
+ * The word "passThrough" isn't competely accurate, but it does capture
+ * the idea of sending the event on to the next filter which can handle it.
+ */
 
 #ifndef UNTITLED1_PASSTHROUGH_H
 #define UNTITLED1_PASSTHROUGH_H

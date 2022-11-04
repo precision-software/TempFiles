@@ -16,11 +16,11 @@
 /* A generic data buffer. */
 typedef struct Buffer
 {
-    Byte *beginBuf;                                                      /* The data buffer itself. TODO: rename to beginPtr. */
-    Byte *endBuf;                                                   /* The end of the buffer, where size = endBuf - beginBuf */
+    Byte *beginBuf;   /* The beginning of the buffer */
+    Byte *endBuf;     /* The end of the buffer, where size = endBuf - beginBuf */
 
-    Byte *beginData;                                                /* Points to the beginning of valid data. */
-    Byte *endData;                                                  /* Points to the end of valid data, where size = endData - beginData. */
+    Byte *beginData;  /* Points to the beginning of valid data. */
+    Byte *endData;    /* Points to the end of valid data, where size = endData - beginData. */
 } Buffer;
 
 inline static size_t sizeMin(size_t size1, size_t size2) {return (size1<size2)? size1: size2;}

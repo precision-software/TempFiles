@@ -11,19 +11,23 @@ static const Error errorLZ4ContextFailed =
 static const Error errorCantBothReadWrite =
         (Error) {.code=errorCodeFilter, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
 
-/* Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred. */
-/* TODO: Not really static message, but will work if the LZ4 messages persist. We need to copy the message. */
+/*
+ * Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred.
+ * TODO: We need to copy the message or repeated errors will change it underneath us.
+ */
 static bool isErrorLz4(size_t size, Error *error) {
     if (errorIsOK(*error) && LZ4F_isError(size))
         *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
     return isError(*error);
 }
 
+
+/* Structure holding the state of our compression/decompression filter. */
 typedef struct Lz4Compress
 {
-    LZ4F_preferences_t preferences;                                 /* Choices for compression. */
-    LZ4F_cctx *cctx;                                                /* Pointer to an LZ4 compression context. */
-    LZ4F_dctx *dctx;                                                /* Pointer to an LZ4 decompression context. */
+    LZ4F_preferences_t preferences;   /* Choices for compression. */
+    LZ4F_cctx *cctx;                  /* Pointer to an LZ4 compression context. */
+    LZ4F_dctx *dctx;                  /* Pointer to an LZ4 decompression context. */
 } Lz4Compress;
 
 /**
@@ -88,8 +92,8 @@ size_t lz4CompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *erro
 }
 
 /**
- * Give a proposed buffer of uncompressed data, how large could the compressed data be?
- * For LZ4 compression, it is crucial the output size be at least as large as any actual output.
+ * Given a proposed buffer of uncompressed data, how large could the compressed data be?
+ * For LZ4 compression, it is crucial the output buffer be at least as large as any actual output.
  * @param inSize - size of uncompressed data.
  * @return - maximum size of compressed data.
  */
@@ -133,7 +137,10 @@ Converter *lz4CompressNew()
     return converterNew(this, &lz4CompressIface);
 }
 
-
+/**
+ * Prepare to decompress the next compression frame. In general, we have a single frame per file,
+ *   but it is possible to have multple frames.
+ */
 size_t lz4DecompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
     /* LZ4F allocates its own context. We provide a pointer to the pointer which it then updates. */
@@ -143,13 +150,22 @@ size_t lz4DecompressBegin(Lz4Compress *this, Byte *buf, size_t size, Error *erro
     return 0;
 }
 
+
+/**
+ * Decompress the next block of data. This is the rare case where the decompressed data
+ * always fits the output buffer, and the input may be partially procesed.
+ * Be sure to decompress any leftover input data.
+ */
 void lz4DecompressConvert(Lz4Compress *this, Byte *toBuf, size_t *toSize, Byte *fromBuf, size_t *fromSize, Error *error)
 {
-    /* Convert the uncompressed bytes from the "fromBuf" into the "toBuf". (On error, toSize and fromSize are zeroed. VERIFY!) */
+    /* Convert the uncompressed bytes from the "fromBuf" into the "toBuf". */
     size_t sizeHint = LZ4F_decompress(this->dctx, toBuf, toSize, fromBuf, fromSize, NULL);
     isErrorLz4(sizeHint, error);
 }
 
+/**
+ * Finish up decompressing a frame. It may flush out data, so be sure to check.
+ */
 size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *error)
 {
     /* release the compression context and check for errors. */
@@ -159,11 +175,20 @@ size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *er
     return 0;
 }
 
+
+/**
+ * Estimate the decompressed size of a compressed buffer.
+ * It is OK to be sloppy, as Lz4DecompressProcess() can handle bad estimates.
+ */
 size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
 {
     return 3 * fromSize;  /* Crude estimate, but doesn't need to be precise. */
 }
 
+
+/**
+ * Free up resources used for decompression.
+ */
 void lz4DecompressFree(Lz4Compress *this, Error *error)
 {
     /* If not done earlier, release the compression context and check for errors. */
@@ -182,7 +207,9 @@ ConverterIface lz4DecompressIface =
     .fnFree = (ConvertFreeFn)lz4DecompressFree
 };
 
-
+/**
+ * Create a new decompression Converter.
+ */
 Converter *lz4DecompressNew()
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
@@ -190,6 +217,11 @@ Converter *lz4DecompressNew()
     return converterNew(this, &lz4DecompressIface);
 }
 
+
+/**
+ * Create a filter for writing and reading compressed files.
+ * @param bufferSize - suggested buffer size for efficiency.
+ */
 Filter *lz4FilterNew(size_t bufferSize, Filter *next)
 {
     return convertFilterNew(bufferSize, lz4CompressNew(), lz4DecompressNew(), next);

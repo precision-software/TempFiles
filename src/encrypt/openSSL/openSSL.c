@@ -1,7 +1,6 @@
 /*
- *
+ * Data converter which implements OpenSSL encryption and decryption.
  */
-
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
@@ -23,7 +22,7 @@ static size_t openSSLError(Error *error)
 
 
 /**
- * Converter to encrypt and decrypt SSL.
+ * Converter structure for encrypting and decrypting OpenSSL.
  */
 typedef struct OpenSSLConverter
 {
@@ -35,6 +34,11 @@ typedef struct OpenSSLConverter
 } OpenSSLConverter;
 
 
+/**
+ * Start the encryption process. This function could produce header information
+ * even before it encrypts data. Note the same function is used for both encryption
+ * and decryption.
+ */
 size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, Error *error)
 {
     /* Now we can set the key and initialization vector */
@@ -48,6 +52,11 @@ size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, 
 }
 
 
+/**
+ * Process a block of data. The output buffer must contain enough room
+ * to hold the entire result, so it is important the output size be as
+ * large as the ConverterSize() function says.
+ */
 void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSize, Byte *inBuf, size_t *inSize, Error *error)
 {
     int outlen = (int)*outSize;
@@ -58,7 +67,10 @@ void openSSLConverterProcess(OpenSSLConverter *this, Byte *outBuf, size_t *outSi
     *outSize = outlen;
 }
 
-
+/**
+ * Finalize the encryption/decryption stream. This function may flush
+ * data or a trailer into the output buffer.
+ */
 size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize, Error *error)
 {
     int outlen = (int)outSize;
@@ -71,6 +83,9 @@ size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize,
     return outlen;
 }
 
+/**
+ * Free up all allocated resources.
+ */
 void openSSLConverterFree(OpenSSLConverter *this, Error *error)
 {
     if (this->ctx != NULL)
@@ -79,9 +94,16 @@ void openSSLConverterFree(OpenSSLConverter *this, Error *error)
 
 }
 
+
+/**
+ * Estimate the output size for a given input size.
+ *  The size doesn't have to be exact, but it can't be smaller than
+ *  any actual output size.
+ */
 size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
 {
-    /* OK to return larger than necessary. Add extra space for padding and checksum. */
+    /* OK to return larger than necessary. Add extra space for padding and digest. */
+    /*   Editorial comment: OpenSSL should provide this function. */
     return inSize + 2*EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE;
 }
 
@@ -94,7 +116,16 @@ ConverterIface openSSLConverterInterface = (ConverterIface)
     .fnSize = (ConvertSizeFn)openSSLConverterSize,
 };
 
-
+/**
+ * Create a new OpenSSL encryption/decryption converter.
+ * @param cipher - the OpenSSL name of the cipher
+ * @param encrypt - 1 for encryption, 0 for decryption.
+ * @param key - the key used for encryption/decryption.
+ * @param keyLen - the length of the key.
+ * @param iv - initialization vector.
+ * @param ivLen - length of the initialization vector
+ * @return - a converter ready to start encrypting or decrypting data streams.
+ */
 Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)
 {
     OpenSSLConverter *this = malloc(sizeof(OpenSSLConverter));
@@ -103,18 +134,30 @@ Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t key
     assert(keyLen <= sizeof(this->key));
     assert(ivLen <= sizeof(this->iv));
 
+    /* Save the configuration in our structure. */
     this->ctx = NULL;
     this->encrypt = encrypt ? 1 : 0;
     strcpy(this->cipher, cipher);
     memcpy(this->key, key, keyLen);
     memcpy(this->iv, iv, ivLen);
 
+    // Create the corresponding converter object.
     return converterNew(this, &openSSLConverterInterface);
 }
 
-
+/**
+ * Create a filter for encrypting/decrypting file streams using OpenSSL.
+ * @param cipher - the OpenSSL name of the cipher
+ * @param encrypt - 1 for encryption, 0 for decryption.
+ * @param key - the key used for encryption/decryption.
+ * @param keyLen - the length of the key.
+ * @param iv - initialization vector.
+ * @param ivLen - length of the initialization vector
+ * @return - a filter ready to start encrypting or decrypting file data
+ */
 Filter *openSSLNew(char *cipherName, Byte *key, size_t keyLen, Byte *iv, size_t ivLen, Filter *next)
 {
+    /* Create a filter which encrypts during writes and decrypts during reads. */
     Converter *encrypt = openSSLConverterNew(cipherName, true, key, keyLen, iv, ivLen);
     Converter *decrypt = openSSLConverterNew(cipherName, false, key, keyLen, iv, ivLen);
     return convertFilterNew(16*1024, encrypt, decrypt, next);
