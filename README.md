@@ -1,39 +1,55 @@
+
+## Use Cases
+### fread/fwrite Replacement
+```plantuml
 @startditaa
-                               fread/fwrite replacement
  fileOpen()-->+-----------+bytes+---------------+blocks+---------------+-->open()
  fileRead()-->|           |     |               |      |               |-->read()
 fileWrite()-->|File Source|<--->|Buffered Stream|<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |      |               |-->fsync()
 fileClose()-->+-----------+     +---------------+      +---------------+-->close()
 @endditaa
-
+```
+### With Compression
+```plantuml
 @startditaa
-                                               With Compression
- fileOpen()-->+-----------+bytes+---------------+bytes+---------------+blocks+---------------+-->open()
- fileRead()-->|           |     |               |     |               |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<--->|LZ4 Compression|<---->|Filesystem Sink|-->write()
- fileSync()-->|           |     |               |     |               |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+     +---------------+      +---------------+-->close()
+ fileOpen()-->+-----------+bytes+---------------+blocks+---------------+blocks+---------------+-->open()
+ fileRead()-->|           |     |               |      |               |      |               |-->read()
+fileWrite()-->|File Source|<--->|Buffered Stream|<---->|LZ4 Compression|<---->|Filesystem Sink|-->write()
+ fileSync()-->|           |     |               |      |               |      |               |-->fsync()
+fileClose()-->+-----------+     +---------------+      +---------------+      +---------------+-->close()
 @endditaa
+```
 
-
+### With Encryption
+```plantuml
 @startditaa
-                                               With Encryption
  fileOpen()-->+-----------+bytes+---------------+blocks+--------------+blocks+---------------+-->open()
  fileRead()-->|           |     |               |      |              |      |               |-->read()
 fileWrite()-->|File Source|<--->|Buffered Stream|<---->|AES Encryption|<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |      |              |      |               |-->fsync()
 fileClose()-->+-----------+     +---------------+      +--------------+      +---------------+-->close()
 @endditaa
+```
 
-
+### Split a stream into multiple files.
+```plantuml
 @startditaa
-                                     Split a stream into multiple files.
+
  fileOpen()-->+-----------+bytes+---------------+blocks+----------+  +--\blocks+---------------+-->open()
  fileRead()-->|           |     |               |      |          +--+  |      |               |-->read()
 fileWrite()-->|File Source|<--->|Buffered Stream|<---->|File Split|  :  :<---->|Filesystem Sink|-->write()
  fileSync()-->|           |     |               |      |          +--+  |      |               |-->fsync()
 fileClose()-->+-----------+     +---------------+      +----------+  +--/      +---------------+-->close()
-                                                                  Multiple
+                                                                   Multiple
                                                                     Files
 @endditaa
+
+```
+TODO:
+- checksum/digest
+- bring code in line with Postgres standards
+- non-static error messages
+- enforce readable/writeable in read/write
+- O_DIRECT and async I/O?
+- add isReadable, isWriteable, isOpen to header, so passThroughXXX can do some simple error handling (instead of each filter)

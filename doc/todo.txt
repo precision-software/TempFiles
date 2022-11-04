@@ -1,9 +1,0 @@
-
-- lz4 compression isn't working
-- create a pipelineNew( filter, ..., filter) which links them all together.
-- conversionFilter - look at pgbackrest APIs for filter. How easy to borrow code?
-- O_DIRECT and async I/O?
-- update unit tests to only issue multiples of blocksize.
-- separate unit tests for each filter/pipeline.
-- add isReadable, isWriteable, isOpen to header, so passThroughXXX can do some simple error handling (instead of each filter)
-- Converter: change names begin->init, convert->update, end->final  to match openSSL vocabulary.
