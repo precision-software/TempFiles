@@ -1,59 +1,63 @@
 
 ## Use Cases
-
-### Testing Mermaid
 ```mermaid
 flowchart LR
-   Start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]  
-   <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-   Stop[read <br> write <br> open <br> close <br> datasync]
-```
-### fread/fwrite Replacement
-```plantuml
-@startditaa
- fileOpen()-->+-----------+bytes+---------------+blocks+---------------+-->open()
- fileRead()-->|           |     |               |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<---->|Filesystem Sink|-->write()
- fileSync()-->|           |     |               |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +---------------+-->close()
-@endditaa
-```
-### With Compression
-```plantuml
-@startditaa
- fileOpen()-->+-----------+bytes+---------------+blocks+---------------+blocks+---------------+-->open()
- fileRead()-->|           |     |               |      |               |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<---->|LZ4 Compression|<---->|Filesystem Sink|-->write()
- fileSync()-->|           |     |               |      |               |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +---------------+      +---------------+-->close()
-@endditaa
+    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+    stop[read <br> write <br> open <br> close <br> datasync]
+    
+    classDef Invisible fill:#000000,stroke:#000000;
+    %%class start,stop Invisible;%%
 ```
 
+### fread/fwrite Replacement
+```mermaid
+flowchart LR
+    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+    stop[read <br> write <br> open <br> close <br> datasync]
+    
+    classDef Invisible fill:#000000,stroke:#000000;
+    %%class start,stop Invisible;%%
+    
+```
 ### With Encryption
-```plantuml
-@startditaa
- fileOpen()-->+-----------+bytes+---------------+blocks+--------------+blocks+---------------+-->open()
- fileRead()-->|           |     |               |      |              |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<---->|AES Encryption|<---->|Filesystem Sink|-->write()
- fileSync()-->|           |     |               |      |              |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +--------------+      +---------------+-->close()
-@endditaa
+```mermaid
+
+flowchart LR
+    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+    stop[read <br> write <br> open <br> close <br> datasync]
+    
+    classDef Invisible fill:#000000,stroke:#000000;
+    %%class start,stop Invisible;%%
+```
+
+### With Compression
+```mermaid
+
+flowchart LR
+    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+    stop[read <br> write <br> open <br> close <br> datasync]
+    
+    classDef Invisible fill:#000000,stroke:#000000;
+    %%class start,stop Invisible;%%
 ```
 
 ### Split a stream into multiple files.
-```plantuml
-@startditaa
+```mermaid
 
- fileOpen()-->+-----------+bytes+---------------+blocks+----------+  +--\blocks+---------------+-->open()
- fileRead()-->|           |     |               |      |          +--+  |      |               |-->read()
-fileWrite()-->|File Source|<--->|Buffered Stream|<---->|File Split|  :  :<---->|Filesystem Sink|-->write()
- fileSync()-->|           |     |               |      |          +--+  |      |               |-->fsync()
-fileClose()-->+-----------+     +---------------+      +----------+  +--/      +---------------+-->close()
-                                                                   Multiple
-                                                                    Files
-@endditaa
+flowchart LR
+    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
+    stop[read <br> write <br> open <br> close <br> datasync]
+    
+    classDef Invisible fill:#000000,stroke:#000000;
+    %%class start,stop Invisible;%% 
+ ```
 
-```
+
 TODO:
 - checksum/digest
 - bring code in line with Postgres standards
