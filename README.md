@@ -1,39 +1,23 @@
 
 ## Use Cases
+### fread/fwrite replacement
+
 ```mermaid
 flowchart LR
-    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-    stop[read <br> write <br> open <br> close <br> datasync]
-    
-    classDef Invisible fill:#000000,stroke:#000000;
-    %%class start,stop Invisible;%%
+    source[FileSource<br>fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+       <-- bytes --> BufferedStream <-- blocks -->
+    sink[FileSystemSink <br> read <br> write <br> open <br> close <br> datasync]
 ```
 
-### fread/fwrite Replacement
+### Encryption
 ```mermaid
 flowchart LR
-    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-    stop[read <br> write <br> open <br> close <br> datasync]
-    
-    classDef Invisible fill:#000000,stroke:#000000;
-    %%class start,stop Invisible;%%
-    
-```
-### With Encryption
-```mermaid
-
-flowchart LR
-    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-    stop[read <br> write <br> open <br> close <br> datasync]
-    
-    classDef Invisible fill:#000000,stroke:#000000;
-    %%class start,stop Invisible;%%
+    FileSource[FileSource <br> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+       <-- bytes --> BufferedStream <-- blocks --> Encryption <-- blocks --> 
+    FilesystemSink[FileSystemSink <br> read <br> write <br> open <br> close <br> datasync]
 ```
 
-### With Compression
+### Compression
 ```mermaid
 
 flowchart LR
