@@ -17,8 +17,11 @@
  */
 struct BufferStream
 {
-    Filter filter;                                                  /* Common to all filters */
-    Buffer *buf;                                                    /* Local buffer */
+    Filter filter;        /* Common to all filters */
+    Buffer *buf;          /* Local buffer */
+    bool dirty;           /* Does the buffer contain dirty data? */
+    size_t position;      /* Current position within the file. */
+    size_t fileSize;      /* The total size of the file, or the biggest we know. */
     bool readable;
     bool writeable;
 };
@@ -56,6 +59,7 @@ Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
     /* We support I/O in only one direction per open. */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
+    this->dirty = false;
     if (this->readable && this->writeable)
         return errorCantBothReadWrite;
 
@@ -111,6 +115,10 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
     return copyFromBuffer(this->buf, buf, bufSize);
 }
 
+
+/**
+ * Seek to a position
+ */
 
 /**
  * Close the buffered stream.

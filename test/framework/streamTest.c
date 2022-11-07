@@ -39,7 +39,7 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
 }
 
 /* Create a file and fill it with known data */
-void generateFile(Filter *pipe, char *path, size_t fileSize, size_t bufferSize)
+void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     Error error = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0);
     Byte *buf = malloc(bufferSize);

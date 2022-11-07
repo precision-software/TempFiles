@@ -18,7 +18,7 @@ void testMain()
         fileSourceNew(
             bufferStreamNew(
                 openSSLNew(
-                    "aes256_cbc",
+                    "AES-256-CBC",
                     (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                     (Byte *)"FEDCBA9876543210FEDCBA9876543210", 32,
                     fileSystemSinkNew())));

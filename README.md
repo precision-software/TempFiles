@@ -1,46 +1,47 @@
 
+
+
 ## Use Cases
 ### fread/fwrite replacement
-
 ```mermaid
 flowchart LR
-    source[FileSource<br>fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+    source[FileSource<hr>fileRead<br>fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream <-- blocks -->
-    sink[FileSystemSink <br> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Encryption
 ```mermaid
 flowchart LR
-    FileSource[FileSource <br> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+    source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream <-- blocks --> Encryption <-- blocks --> 
-    FilesystemSink[FileSystemSink <br> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Compression
 ```mermaid
-
 flowchart LR
-    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-    stop[read <br> write <br> open <br> close <br> datasync]
-    
-    classDef Invisible fill:#000000,stroke:#000000;
-    %%class start,stop Invisible;%%
+    source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+       <-- bytes --> BufferedStream <-- blocks --> LZ4Compression <-- blocks --> 
+    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Split a stream into multiple files.
 ```mermaid
 
 flowchart LR
-    start[fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-      <--> FileSource <-- bytes --> BufferedStream <-- blocks --> FilesystemSink <-->
-    stop[read <br> write <br> open <br> close <br> datasync]
-    
-    classDef Invisible fill:#000000,stroke:#000000;
-    %%class start,stop Invisible;%% 
- ```
+    source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+       <-- bytes --> BufferedStream <-- blocks --> a[File Split <hr> multiple <br> files] <-- blocks --> 
+    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+```
 
+### Why not? All of the above.
+```mermaid
+flowchart LR
+    source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
+       <-- bytes --> BufferedStream  <-- blocks --> LZ4Compression <-- blocks --> Encryption <-- blocks --> a[File Split <hr> multiple <br> files] <-- blocks --> 
+    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+```
 
 TODO:
 - checksum/digest
@@ -49,3 +50,4 @@ TODO:
 - enforce readable/writeable in read/write
 - O_DIRECT and async I/O?
 - add isReadable, isWriteable, isOpen to header, so passThroughXXX can do some simple error handling (instead of each filter)
+  Stream API

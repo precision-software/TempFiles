@@ -1,6 +1,0 @@
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/bufferTest.dir
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/fileSplitTest.dir
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/encryptTest.dir
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/lz4Test.dir
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/john/Desktop/projects/TempFiles/cmake-build-debug/CMakeFiles/rebuild_cache.dir

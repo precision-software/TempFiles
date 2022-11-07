@@ -1,14 +1,19 @@
 /*
  * Data converter which implements OpenSSL encryption and decryption.
  */
+#include <openssl/opensslv.h>
+#include <openssl/ssl.h>
+
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
 #include "encrypt/openSSL/openSSL.h"
 #include "common/convertFilter.h"
+#include "common/filter.h"
 
 static const Error errorBadKeyLen = (Error){.code=errorCodeFilter, .msg="Unexpected Key or IV length."};
 static const Error errorBadDecryption = (Error) {.code=errorCodeFilter, .msg="Unable to decrypt current buffer"};
+void openSSLInit(void);
 
 /*
  * Convenience function to build an SSL error and return zero.
@@ -27,7 +32,8 @@ static size_t openSSLError(Error *error)
 typedef struct OpenSSLConverter
 {
     EVP_CIPHER_CTX *ctx;         /* SSL context. */
-    char cipher[64];             /* The name of the cipher  (not used yet) */
+    char cipherName[64];         /* The name of the cipher */
+    EVP_CIPHER *cipher;          /* The OpenSSL cipher structure */
     Byte key[64];                /* The cipher key. */
     Byte iv[64];                 /* The initialization vector. */
     int encrypt;                 /* 1 if encrypting, 0 if decrypting, matching libcrypto. */
@@ -39,13 +45,19 @@ typedef struct OpenSSLConverter
  * even before it encrypts data. Note the same function is used for both encryption
  * and decryption.
  */
+static bool libraryInitialized = false;
 size_t openSSLConverterBegin(OpenSSLConverter *this, Byte *buf, size_t bufSize, Error *error)
 {
-    /* Now we can set the key and initialization vector */
+    /* Create an OpenSSL cipher context. */
     this->ctx = EVP_CIPHER_CTX_new();
-    const EVP_CIPHER *cipher = EVP_aes_256_cbc(); /* TODO: look up cipher, add error handling. */
 
-    if (!EVP_CipherInit_ex2(this->ctx, cipher, this->key, this->iv, this->encrypt, NULL))
+    /* Lookup cipher by name. The name must be an exact match to an OpenSSL name */
+    this->cipher = EVP_CIPHER_fetch(NULL, this->cipherName, NULL);
+    if (this->cipher == NULL)
+        return filterError(error, "Encryption problem - cipher name not recognized");
+
+    /* Now we can set the key and initialization vector */
+    if (!EVP_CipherInit_ex2(this->ctx, this->cipher, this->key, this->iv, this->encrypt, NULL))
         return openSSLError(error);
 
     return 0;
@@ -77,8 +89,9 @@ size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize,
     if (!EVP_CipherFinal_ex(this->ctx, outBuf, &outlen))
        return openSSLError(error);
 
+    EVP_CIPHER_free(this->cipher);
     EVP_CIPHER_CTX_free(this->ctx);
-    this->ctx = NULL;
+    this->ctx = this->cipher = NULL;
 
     return outlen;
 }
@@ -91,19 +104,17 @@ void openSSLConverterFree(OpenSSLConverter *this, Error *error)
     if (this->ctx != NULL)
         EVP_CIPHER_CTX_free(this->ctx);
     free(this);
-
 }
 
 
 /**
  * Estimate the output size for a given input size.
  *  The size doesn't have to be exact, but it can't be smaller than
- *  any actual output size.
+ *  the actual output size. Ideally, libcrypto would provide this function.
  */
 size_t openSSLConverterSize(OpenSSLConverter *this, size_t inSize)
 {
     /* OK to return larger than necessary. Add extra space for padding and digest. */
-    /*   Editorial comment: OpenSSL should provide this function. */
     return inSize + 2*EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE;
 }
 
@@ -128,16 +139,16 @@ ConverterIface openSSLConverterInterface = (ConverterIface)
  */
 Converter *openSSLConverterNew(char *cipher, bool encrypt, Byte *key, size_t keyLen, Byte *iv, size_t ivLen)
 {
-    OpenSSLConverter *this = malloc(sizeof(OpenSSLConverter));
+    OpenSSLConverter *this = malloc(sizeof(OpenSSLConverter));      // TODO: Postgres memory mgmt.
 
-    assert(strlen(cipher) < sizeof(this->cipher));
+    assert(strlen(cipher) < sizeof(this->cipherName));
     assert(keyLen <= sizeof(this->key));
     assert(ivLen <= sizeof(this->iv));
 
     /* Save the configuration in our structure. */
     this->ctx = NULL;
     this->encrypt = encrypt ? 1 : 0;
-    strcpy(this->cipher, cipher);
+    strcpy(this->cipherName, cipher);
     memcpy(this->key, key, keyLen);
     memcpy(this->iv, iv, ivLen);
 
