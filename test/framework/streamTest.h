@@ -9,5 +9,6 @@
 
 void streamTest(FileSource *pipe, char *nameFmt);
 void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufSize);
+void verifyRandomFile(FileSource *pipe, char *nameFmt, size_t fileSize, size_t blockSize);
 
 #endif //FILTER_STREAMTEST_H

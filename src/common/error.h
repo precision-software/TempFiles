@@ -51,11 +51,19 @@ static const Error errorEOF = {.code = errorCodeEOF, .msg = "EOF"};
 inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(errno)};}
 static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="Not Implemented"};
 
-inline static int filterError(Error *error, char *msg)
+
+/* Convenience function to update error and return 0 in one statement */
+inline static int setError(Error *error, Error newError)
 {
     if (errorIsOK(*error))
-        *error = (Error){.code=errorCodeFilter, .msg=msg};
+        *error = newError;
     return 0;
 }
+
+inline static int filterError(Error *error, char *msg)
+{
+    return setError(error, (Error){.code=errorCodeFilter, .msg=msg});
+}
+
 
 #endif /*FILTER_ERROR_H */

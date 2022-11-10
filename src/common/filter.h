@@ -61,6 +61,7 @@ typedef struct Filter {
     struct Filter *nextClose;
     struct Filter *nextAbort;
     struct Filter *nextSize;
+    struct Filter *nextSeek;
 } Filter;
 
 /***********************************************************************************************************************************
@@ -73,6 +74,7 @@ typedef void (*FilterClose)(void *this, Error *error);
 typedef void (*FilterSync)(void *this, Error *error);
 typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
+typedef void (*FilterSeek)(void *this, size_t position, Error *error);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -82,9 +84,13 @@ typedef struct FilterInterface {
     FilterSync fnSync;
     FilterAbort fnAbort;
     FilterSize fnSize;
+    FilterSeek fnSeek;
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */
 Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
+
+/* Some possibly helpful stubs. */
+void badSeek(Filter *this, size_t position, Error *error);
 
 #endif /*UNTITLED1_FILTER_H */

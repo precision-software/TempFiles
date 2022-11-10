@@ -25,9 +25,15 @@ Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
     this->nextSync = getNext(Sync, this);
     this->nextAbort = getNext(Abort, this);
     this->nextSize = getNext(Size, this);
+    this->nextSeek = getNext(Seek, this);
 
     /* Each filter must provide a "Size" routine in its interface. */
     assert(this->iface->fnSize != NULL);
 
     return this;
+}
+
+void badSeek(Filter *this, size_t position, Error *error)
+{
+    filterError(error, "Filter does not implement Seek().");
 }

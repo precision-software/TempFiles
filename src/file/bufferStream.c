@@ -1,6 +1,6 @@
 /**
  * Filter which reconciles an input of one block size with output of a different block size.
- * It replicates the functionality of fread/fwrite/fseek, sending and receiving blocks of data.
+ * It replicates the functionality of fread/fwrite to streams, sending and receiving blocks of data.
  */
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
@@ -19,9 +19,6 @@ struct BufferStream
 {
     Filter filter;        /* Common to all filters */
     Buffer *buf;          /* Local buffer */
-    bool dirty;           /* Does the buffer contain dirty data? */
-    size_t position;      /* Current position within the file. */
-    size_t fileSize;      /* The total size of the file, or the biggest we know. */
     bool readable;
     bool writeable;
 };
@@ -59,7 +56,6 @@ Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
     /* We support I/O in only one direction per open. */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
-    this->dirty = false;
     if (this->readable && this->writeable)
         return errorCantBothReadWrite;
 
@@ -82,7 +78,7 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
         return passThroughWrite(this, buf, bufSize, error);
 
     /* Copy data into the buffer. */
-    size_t actualSize = copyToBuffer(this->buf, buf, bufSize);
+    size_t actualSize = appendToBuffer(this->buf, buf, bufSize);
 
     /* Flush the buffer if full, attributing any errors to our write request. */
     bufferFlush(this->buf, this, error);
@@ -155,6 +151,7 @@ FilterInterface bufferStreamInterface = (FilterInterface)
     .fnRead = (FilterRead)bufferStreamRead,
     .fnSync = (FilterSync)bufferStreamSync,
     .fnSize = (FilterSize)bufferStreamSize,
+    .fnSeek = (FilterSeek)badSeek,
 } ;
 
 /***********************************************************************************************************************************

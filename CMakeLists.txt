@@ -13,7 +13,7 @@ add_executable(bufferTest test/bufferTest.c
         src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
         src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h test/kitchenSinkTest.c)
+        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h test/kitchenSinkTest.c src/file/bufferSeek.c src/file/bufferSeek.h)
 
 add_executable(fileSplitTest test/fileSplitTest.c src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
         test/framework/unitTestInternal.h test/framework/streamTest.c test/framework/streamTest.h test/framework/unitTest.h
@@ -55,3 +55,13 @@ add_executable(kitchenSinkTest test/kitchenSinkTest.c
         src/common/convertFilter.c src/common/convertFilter.h test/framework/unitTestInternal.h test/framework/streamTest.c
         test/framework/streamTest.h test/framework/unitTest.h src/common/converter.h)
 target_link_libraries(kitchenSinkTest PUBLIC lz4 crypto)
+
+
+add_executable(seekTest test/seekTest.c
+        test/framework/unitTestInternal.h test/framework/streamTest.c test/framework/streamTest.h test/framework/unitTest.h
+        src/common/filter.c src/common/filter.h
+        src/common/passThrough.c src/common/passThrough.h src/file/bufferSeek.c src/file/bufferSeek.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
+        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h
+        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/bufferSeek.c src/file/bufferSeek.h)

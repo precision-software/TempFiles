@@ -16,6 +16,7 @@ Error fileOpen(FileSource *this, char *path, int mode, int perm);
 
 size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error);
+void fileSeek(FileSource *this, size_t position, Error *error);
 
 void fileClose(FileSource *this, Error *error);
 
