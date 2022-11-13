@@ -52,6 +52,7 @@ inline static void
 bufferReset(Buffer *this)
 {
     this->current = this->endData = this->beginBuf;
+    memset(this->beginBuf, 'Y', this->endBuf-this->beginBuf);  // TODO: DEBUG ONLY!!
 }
 
 inline static size_t toBuffer(Buffer *this, size_t size)

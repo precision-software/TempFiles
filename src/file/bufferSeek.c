@@ -11,14 +11,18 @@
  *  - If the subsequent filters have fixed but unaligned blocks, then
  *    a single random write can translate into 4 physical disk I/Os.
  *
- * Note that BufferSeek can support O_DIRECT files if desired.
+ * Note that BufferSeek can support O_DIRECT files if the last block is padded.
  *
  * Some logical assertions:
- *    All I/O to next stage is block aligned.
- *    All reads and writes transfer an entire block, except for the final block in the file.
- *    this->position * this->blkSize + bufferReadSize(this->buf)  points to our current file position.
+ *    1) All I/Os to actual file are block aligned.  ("actual file" means next stage in pipeline.)
+ *    2) All I/Os transfer an entire block, except for the final block in the file.
+ *    3) The actual file is pre-positioned for the next I/O.
+ *       a) If the buffer is empty or dirty, the actual file position matches blockPosition.
+ *       b) If the buffer has clean data, the actual file position matches blockPosition+blockSize.
+ *    Purely sequential reads/writes do not require Seek operations.
  *    If dirty, our internal buffer is not empty.
- *    Sequential reads/writes do not require Seek operations.
+ *
+ * TODO: Open should return a new instance each time, so we can open multiple files at once.
  */
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
@@ -36,17 +40,22 @@
 struct BufferSeek
 {
     Filter filter;        /* Common to all filters */
-    Buffer *buf;          /* Local buffer, precisely one block in size. */
+
+    size_t blockSize;     /* The size of blocks we read/write to our successor. */
+    Byte *buf;            /* Local buffer, precisely one block in size. */
     bool dirty;           /* Does the buffer contain dirty data? */
-    size_t blockIdx;      /* Index position of the current block in the buffer. */
-    size_t fileSize;      /* Highest block index we've read or written so far */
+
+    size_t position;      /* Current byte position in the file. */
+    size_t blockPosition; /* Byte position of the beginning of the buffer */
+    size_t blockActual;   /* Nr of actual bytes in the buffer */
+
+    size_t fileSize;      /* Highest byte position we've seen so far for the file. */
+    bool sizeConfirmed;   /* fileSize is confirmed as actual file size. */
+
     bool readable;
     bool writeable;
-    size_t blockSize;
 };
 
-static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="BufferSeek can't read and write the same stream", .causedBy=NULL};
 
 /* Forward references */
 void writeBlock(BufferSeek *this, size_t position, Error *error);
@@ -61,7 +70,7 @@ void fillCurrentBlock(BufferSeek *this, Error *error);
  * block size is requested downstream.
  *
  * Question: should we throw error if our requested blocksize doesn't
- * match downstream block size?
+ * match downstream block size?  TODO:
  */
 size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
 {
@@ -70,102 +79,246 @@ size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
     this->filter.writeSize = sizeMax(this->blockSize, writeSize);
     this->filter.readSize = sizeMax(this->blockSize, passThroughSize(this, writeSize));
 
-    /* Round the buffer size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
+    /* Round the block size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
     size_t bufSize = sizeMax(this->filter.writeSize, this->filter.readSize);
-    this->buf = bufferNew(bufSize);
+    this->buf = palloc(bufSize);
 
     return 1;
 }
 
 
 /**
- * Open a buffered file, either for reading or writing.
+ * Open a buffered file, reading, writing or both.
  */
 Error bufferSeekOpen(BufferSeek *this, char *path, int mode, int perm)
 {
-    /* We support I/O in only one direction per open. */
+    /* Are we read/writing or both? */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
-    this->dirty = false;
-    this->blockIdx = 0;
-    bufferReset(this->buf);
 
-    if (this->readable && this->writeable)
-        return errorCantBothReadWrite;
+    /* Position to the start of file */
+    this->position = 0;
+    this->blockPosition = 0;
+
+    /* Start with an empty buffer */
+    this->dirty = false;
+    this->blockActual = 0;
+
+    /* We don't know the size of the file yet. */
+    this->fileSize = 0;
+    this->sizeConfirmed = (mode & O_TRUNC) == O_TRUNC;
 
     /* Pass the event to the next filter to actually open the file. */
     return passThroughOpen(this, path, mode, perm);
+}
+
+static void checkBuffer(BufferSeek(*this))
+{
+    assert(this->fileSize >= this->blockPosition + this->blockActual);
+    assert(this->blockPosition <= this->position);
+    assert(this->position <= this->fileSize);
+    assert(this->blockPosition + this->blockActual >= this->position || this->blockActual == 0);
+    size_t offset = this->position % this->blockSize;
+    assert(this->blockPosition+offset == this->position || this->blockPosition+this->blockSize == this->position);
+    assert(this->blockActual <= this->blockSize);
+}
+
+
+
+static void flushBuffer(BufferSeek *this, Error *error)
+{
+    checkBuffer(this);
+
+    /* Check for holes. */
+    //if (this->position > this->fileSize)
+     //   return (void) filterError(error, "Positioned beyond End-Of-File - holes not allowed.");
+
+    /* if the block is dirty, flush it. */
+    if (this->dirty && this->blockActual > 0)
+        passThroughWriteAll(this, this->buf, this->blockActual, error);
+    this->dirty = false;
+
+    checkBuffer(this);
+}
+
+static void nextBuffer(BufferSeek *this, Error *error)
+{
+    checkBuffer(this);
+    /* If we are positioned at the end of the current buffer, ... */
+    if (this->blockActual > 0 && this->position >= this->blockPosition + this->blockSize)
+    {
+        /* Write out the current buffer if dirty */
+        flushBuffer(this, error);
+        if (isError(*error))
+            return;
+
+        /* Position to the beginning of the next buffer */
+        this->blockPosition += this->blockSize;
+        this->blockActual = 0;
+
+        if (this->blockPosition > this->fileSize)
+            this->fileSize = this->position;
+        checkBuffer(this);
+    }
+}
+
+
+static void fillBuffer (BufferSeek *this, Error *error)
+{
+    if (this->blockActual == 0)
+    {
+        this->blockActual = passThroughRead(this, this->buf, this->blockSize, error);
+        this->sizeConfirmed |= this->blockActual < this->blockSize;
+        if (this->blockPosition + this->blockActual > this->fileSize)
+            this->fileSize = this->blockPosition + this->blockActual;
+    }
+}
+
+static size_t copyIn(BufferSeek *this, Byte *buf, size_t size)
+{
+    checkBuffer(this);
+    size_t offset = this->position - this->blockPosition;
+    size_t actual = sizeMin(this->blockSize-offset, size);
+    memcpy(this->buf + offset, buf, actual);
+    return actual;
+}
+
+static size_t copyOut(BufferSeek *this, Byte *buf, size_t size)
+{
+    checkBuffer(this);
+    size_t offset = this->position - this->blockPosition;
+    size_t actual = sizeMin(this->blockActual-offset, size);
+    memcpy(buf, this->buf + offset, actual);
+    return actual;
 }
 
 
 /**
  * Write data to the buffered stream.
  */
-size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t bufSize, Error* error)
+size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t size, Error* error)
 {
     if (!errorIsOK(*error))
         return 0;
+    checkBuffer(this);
 
-    /* For large aligned writes, don't do read/modify/write */
-    if (bufferIsEmpty(this->buf) && bufSize >= this->blockSize)
+    /* Advance to next buffer if appropriate. */
+    nextBuffer(this, error);
+
+    /* If our buffer is empty and the request is aligned and big enough, ... */
+    if (this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
     {
-        /* Write 1 or more full blocks to the next stage. */
-        size_t actualBlocks = bufSize / this->blockSize;
-        size_t actual = actualBlocks * this->blockSize;
-        passThroughWriteAll(this, buf, actual, error);
+        /* Bypass our buffer and write a block directly to the next stage */
+        size_t actual = passThroughWriteAll(this, buf, this->blockSize, error);
         if (isError(*error))
             return 0;
 
-        /* Update the current file position, and done. */
-        this->blockIdx += actualBlocks;
+        /* Update our position to reflect the write */
+        this->position += actual;
+        this->blockPosition += actual;
+
+        if (this->position > this->fileSize)
+            this->fileSize = this->position;
         return actual;
     }
 
-    /* Fill the buffer if read/modify/write  */
-    if (bufferIsEmpty(this->buf) && this->blockIdx <= this->fileSize)
-        readBlock(this, this->blockIdx, error);
+    /* If we are both read+writing, read before modifying. */
+    /*   Note we are moving from assertion 3a to assertion 3b. */
+    if (this->readable) // TODO: use known file size as well.
+        fillBuffer(this, error);
 
-    /* Copy data into current position in the buffer. */
-    size_t actualSize = copyIntoBuffer(this->buf, buf, bufSize);
+    /* if we are about to dirty a clean buffer, then seek back to beginning of buffer */
+    /*  Note we are moving from assertion 3b to assertion 3a. */
+    if (this->blockActual > 0 && !this->dirty)
+        passThroughSeek(this, this->blockPosition, error);
     this->dirty = true;
 
-    /* Flush the buffer if full, attributing any errors to our write request. */
-    if (bufferIsFull(this->buf))
-    {
-        writeBlock(this, this->blockIdx, error);
-        if (isError(*error))
-            return 0;
+    /* Copy data into the buffer */
+    size_t actual = copyIn(this, buf, size);
+    this->position += actual;
 
-        /* Extend known file size if growing. */
-        if (this->blockIdx > this->fileSize)
-            this->fileSize = this->blockIdx;
-    }
+    /* We may have extended valid data at the end of block. */
+    size_t offset = this->position - this->blockPosition;
+    if (offset > this->blockActual)
+        this->blockActual = offset;
 
-    return actualSize;
+    /* Update our knowledge about the size of the file. */
+    if (this->blockPosition + this->blockActual > this->fileSize)
+        this->fileSize = this->blockPosition + this->blockActual;
+
+    /* done */
+    checkBuffer(this);
+    return actual;
 }
 
 
 /**
- * Read data from the buffered stream.
- *  Note our read request must be at least as large as our successor's block size.
+ * Read bytes from the buffered stream.
+ * Note it may take multiple reads to get all the data or to reach EOF.
  */
-size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t bufSize, Error *error)
+size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
 {
     if (!errorIsOK(*error))
         return 0;
 
-    /* If buffer is empty, fetch a block of data. */
-    if (bufferIsEmpty(this->buf))
-        readBlock(this, this->blockIdx, error);
-
-    /* Check for error while filling buffer. */
+    /* Advance to next buffer if appropriate. */
+    nextBuffer(this, error);
     if (isError(*error))
         return 0;
 
-    /* Copy data from buffer since all is OK; */
-    size_t size = copyFromBuffer(this->buf, buf, bufSize);
+    /* If our buffer is empty and the request is big enough and aligned, ... */
+    if (this->blockActual == 0 && size >= this->blockSize && this->position == this->blockPosition)
+    {
+        /* Bypass our buffer and read a block directly from the next stage */
+        size_t actual = passThroughRead(this, buf, this->blockSize, error);
+        if (isError(*error))
+            return 0;
 
-    return size;
+        /* Update our position to reflect the read. TODO: what about partial read? */
+        if (actual == this->blockSize)
+            this->blockPosition += this->blockSize;
+        this->position += actual;
+
+        /* Track the file size as well as we can. */
+        this->sizeConfirmed |= actual < this->blockSize;
+        if (this->position > this->fileSize)
+            this->fileSize = this->position;
+
+        checkBuffer(this);
+        return actual;
+    }
+
+    /* Read in the current buffer if not already done. */
+    if (this->blockActual == 0)
+    {
+        fillBuffer(this, error);
+        if (isError(*error))
+            return 0;
+    }
+
+    /* If we are still positioned at end of buffer, then EOF.  (explain?) */
+    if (this->position == this->blockPosition + this->blockActual)
+        return setError(error, errorEOF);
+
+    /* If we are positioned beyond end of buffer, then HOLE. (explain?) */
+    if (this->position > this->blockPosition + this->blockActual)
+        return filterError(error, "Attempting to read past End-Of-File.");
+
+    /* Copy bytes out from our internal buffer. */
+    size_t actual = copyOut(this, buf, size);
+    this->position += actual;
+
+    /* If we reached end of block, then prepare to read the next block */
+    assert(this->position <= this->blockPosition + this->blockSize);
+    if (this->position == this->blockPosition + this->blockSize)
+    {
+        this->blockPosition = this->position;
+        this->blockActual = 0;
+    }
+
+    /* Return the number of bytes transferred. */
+    checkBuffer(this);
+    return actual;
 }
 
 
@@ -174,27 +327,31 @@ size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t bufSize, Error *error)
  */
 void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
 {
+    checkBuffer(this);
     if (isError(*error))
         return;
 
-    /* Get the block index for that position */
-    size_t newBlock = position / this->blockSize;
-
     /* If we are moving to a different block ... */
-    if (newBlock != this->blockIdx)
+    size_t newBlock = position - position % this->blockSize;
+    if (newBlock != this->blockPosition)
     {
         /* If dirty, flush current block. */
-        flushCurrentBlock(this, error);
+        flushBuffer(this, error);
 
-        /* Make note of new current block. Note we haven't seeked yet. */
-        this->blockIdx = newBlock;
+        /* Position to new block in file. */
+        passThroughSeek(this, newBlock, error);
+        this->blockPosition = newBlock;
+        this->blockActual = 0;
     }
 
-    /* If we are positioned to the middle of a block, fetch the block and update the buffer pointer */
-    size_t offset = position % this->blockSize;
-    if (offset != 0)
-        fillCurrentBlock(this, error);
-    this->buf->current = this->buf->beginBuf + offset;
+    /* At this point, we are pointing to the desired block. Update position */
+    this->position = position;
+
+    /* Check for seek beyond filesize */
+    if (this->position > this->fileSize)
+        this->fileSize = this->position; // TODO: What about holes?
+
+    checkBuffer(this);
 }
 
 /**
@@ -203,7 +360,7 @@ void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
 void bufferSeekClose(BufferSeek *this, Error *error)
 {
     /* Flush our buffers. */
-    bufferForceFlush(this->buf, this, error);
+    flushBuffer(this, error);
 
     /* Pass on the close request., */
     passThroughClose(this, error);
@@ -218,7 +375,7 @@ void bufferSeekClose(BufferSeek *this, Error *error)
 void bufferSeekSync(BufferSeek *this, Error *error)
 {
     /* Flush our buffers. */
-    bufferForceFlush(this->buf, this, error);
+    //bufferForceFlush(this->buf, this, error);
 
     /* Pass on the sync request */
     passThroughSync(this, error);
@@ -232,6 +389,7 @@ FilterInterface bufferSeekInterface = (FilterInterface)
                 .fnRead = (FilterRead)bufferSeekRead,
                 .fnSync = (FilterSync)bufferSeekSync,
                 .fnSize = (FilterSize)bufferSeekSize,
+                .fnSeek = (FilterSeek)bufferSeekSeek,
         } ;
 
 /***********************************************************************************************************************************
@@ -244,62 +402,4 @@ Filter *bufferSeekNew(size_t blockSize, Filter *next)
     this->blockSize = blockSize;
 
     return filterInit(this, &bufferSeekInterface, next);
-}
-
-
-void readBlock(BufferSeek *this, size_t blockIdx, Error *error)
-{
-    /* Figure out where we actually are in the file. (Did we read the current block?) */
-    /*  In the case of a partial, final block, we'll get an EOF in the next read. */
-    if (!bufferIsEmpty(this->buf))
-        this->blockIdx++;  // TODO: Want errors to be noop.
-
-    /* Issue a Seek if we aren't already there. */
-    if (blockIdx != this->blockIdx)
-        passThroughSeek(this, blockIdx * this->blockSize, error);
-
-    /* Read the block from the next stage */
-    size_t size = passThroughReadAll(this, this->buf->beginBuf, this->blockSize, error);
-    if (isError(*error))
-        return;
-
-    /* Update buffer to reflect the data we just read in */
-    this->buf->endData = this->buf->beginBuf + size;
-    this->buf->current = this->buf->beginBuf;
-
-    /* Update current block index and extend file size if we discovered new size. */
-    this->blockIdx = blockIdx;
-    this->fileSize = sizeMax(this->fileSize, this->blockIdx);
-}
-
-
-void writeBlock(BufferSeek *this, size_t blockIdx, Error *error)
-{
-    /* Seek if we are already there. */
-    if (blockIdx != this->blockIdx + 1)
-        passThroughSeek(this, this->blockIdx * this->blockSize, error);
-    this->blockIdx = blockIdx;
-
-    /* Write the block, extending file size if it grew. */
-    passThroughWriteAll(this, this->buf->beginBuf, bufferDataSize(this->buf), error);
-    this->fileSize = sizeMax(this->fileSize, this->blockIdx);
-
-    /* Clear out the buffer */
-    bufferReset(this->buf);
-    this->dirty = false;
-}
-
-void fillCurrentBlock(BufferSeek *this, Error *error)
-{
-    if (!bufferIsEmpty(this->buf) && errorIsOK(*error))
-        readBlock(this, this->blockIdx, error);
-}
-
-void flushCurrentBlock(BufferSeek *this, Error *error)
-{
-    if (this->dirty)
-        writeBlock(this, this->blockIdx, error);
-
-    bufferReset(this->buf);
-    this->dirty = false;
 }
