@@ -112,6 +112,10 @@ Error bufferSeekOpen(BufferSeek *this, char *path, int mode, int perm)
     return passThroughOpen(this, path, mode, perm);
 }
 
+
+/*
+ * A debug function to verify the various buffer pointers are consistent with each other.
+ */
 static void checkBuffer(BufferSeek(*this))
 {
     assert(this->fileSize >= this->blockPosition + this->blockActual);
@@ -127,8 +131,6 @@ static void checkBuffer(BufferSeek(*this))
 
 static void flushBuffer(BufferSeek *this, Error *error)
 {
-    checkBuffer(this);
-
     /* Check for holes. */
     //if (this->position > this->fileSize)
      //   return (void) filterError(error, "Positioned beyond End-Of-File - holes not allowed.");
@@ -137,13 +139,10 @@ static void flushBuffer(BufferSeek *this, Error *error)
     if (this->dirty && this->blockActual > 0)
         passThroughWriteAll(this, this->buf, this->blockActual, error);
     this->dirty = false;
-
-    checkBuffer(this);
 }
 
 static void nextBuffer(BufferSeek *this, Error *error)
 {
-    checkBuffer(this);
     /* If we are positioned at the end of the current buffer, ... */
     if (this->blockActual > 0 && this->position >= this->blockPosition + this->blockSize)
     {
@@ -158,7 +157,6 @@ static void nextBuffer(BufferSeek *this, Error *error)
 
         if (this->blockPosition > this->fileSize)
             this->fileSize = this->position;
-        checkBuffer(this);
     }
 }
 
@@ -176,7 +174,6 @@ static void fillBuffer (BufferSeek *this, Error *error)
 
 static size_t copyIn(BufferSeek *this, Byte *buf, size_t size)
 {
-    checkBuffer(this);
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockSize-offset, size);
     memcpy(this->buf + offset, buf, actual);
@@ -185,7 +182,6 @@ static size_t copyIn(BufferSeek *this, Byte *buf, size_t size)
 
 static size_t copyOut(BufferSeek *this, Byte *buf, size_t size)
 {
-    checkBuffer(this);
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockActual-offset, size);
     memcpy(buf, this->buf + offset, actual);
@@ -194,13 +190,12 @@ static size_t copyOut(BufferSeek *this, Byte *buf, size_t size)
 
 
 /**
- * Write data to the buffered stream.
+ * Write data to the buffered file.
  */
 size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t size, Error* error)
 {
     if (!errorIsOK(*error))
         return 0;
-    checkBuffer(this);
 
     /* Advance to next buffer if appropriate. */
     nextBuffer(this, error);
@@ -247,7 +242,6 @@ size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t size, Error* error)
         this->fileSize = this->blockPosition + this->blockActual;
 
     /* done */
-    checkBuffer(this);
     return actual;
 }
 
@@ -284,7 +278,6 @@ size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
         if (this->position > this->fileSize)
             this->fileSize = this->position;
 
-        checkBuffer(this);
         return actual;
     }
 
@@ -317,7 +310,6 @@ size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
     }
 
     /* Return the number of bytes transferred. */
-    checkBuffer(this);
     return actual;
 }
 
@@ -327,7 +319,6 @@ size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
  */
 void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
 {
-    checkBuffer(this);
     if (isError(*error))
         return;
 
@@ -351,7 +342,6 @@ void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
     if (this->position > this->fileSize)
         this->fileSize = this->position; // TODO: What about holes?
 
-    checkBuffer(this);
 }
 
 /**
