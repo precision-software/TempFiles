@@ -52,8 +52,8 @@ struct BufferSeek
     size_t fileSize;      /* Highest byte position we've seen so far for the file. */
     bool sizeConfirmed;   /* fileSize is confirmed as actual file size. */
 
-    bool readable;
-    bool writeable;
+    bool readable;        /* Opened for reading */
+    bool writeable;       /* Opened for writing */
 };
 
 
@@ -62,30 +62,6 @@ void writeBlock(BufferSeek *this, size_t position, Error *error);
 void readBlock(BufferSeek *this, size_t position, Error *error);
 void flushCurrentBlock(BufferSeek *this, Error *error);
 void fillCurrentBlock(BufferSeek *this, Error *error);
-
-/**
- * Negotiate buffer sizes needed by neighboring filters.
- * Since our primary purpose is to resolve block size differences, we handle
- * single byte blocks (or larger) from upstream, and we match whatever
- * block size is requested downstream.
- *
- * Question: should we throw error if our requested blocksize doesn't
- * match downstream block size?  TODO:
- */
-size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
-{
-    assert(writeSize > 0);
-    /* We don't change the size of data as it passes through, although we may set a larger block size. */
-    this->filter.writeSize = sizeMax(this->blockSize, writeSize);
-    this->filter.readSize = sizeMax(this->blockSize, passThroughSize(this, writeSize));
-
-    /* Round the block size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
-    size_t bufSize = sizeMax(this->filter.writeSize, this->filter.readSize);
-    this->buf = palloc(bufSize);
-
-    return 1;
-}
-
 
 /**
  * Open a buffered file, reading, writing or both.
@@ -370,6 +346,31 @@ void bufferSeekSync(BufferSeek *this, Error *error)
     /* Pass on the sync request */
     passThroughSync(this, error);
 }
+
+
+/**
+ * Negotiate buffer sizes needed by neighboring filters.
+ * Since our primary purpose is to resolve block size differences, we handle
+ * single byte blocks (or larger) from upstream, and we match whatever
+ * block size is requested downstream.
+ *
+ * Question: should we throw error if our requested blocksize doesn't
+ * match downstream block size?  TODO:
+ */
+size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
+{
+    assert(writeSize > 0);
+    /* We don't change the size of data as it passes through, although we may set a larger block size. */
+    this->filter.writeSize = sizeMax(this->blockSize, writeSize);
+    this->filter.readSize = sizeMax(this->blockSize, passThroughSize(this, writeSize));
+
+    /* Round the block size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
+    size_t bufSize = sizeMax(this->filter.writeSize, this->filter.readSize);
+    this->buf = palloc(bufSize);
+
+    return 1;
+}
+
 
 FilterInterface bufferSeekInterface = (FilterInterface)
         {
