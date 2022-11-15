@@ -153,9 +153,9 @@ FilterInterface fileSystemInterface = (FilterInterface)
  */
 Filter *fileSystemSinkNew(size_t blockSize)
 {
-    /* Default block size, good for streaming */
+    /* Default block size, OK for streaming, should match file system block size for blocks. */
     if (blockSize == 0)
-        blockSize = 16*1024*1024;
+        blockSize = 16*1024;
 
     FileSystemSink *this = malloc(sizeof(FileSystemSink));
     *this = (FileSystemSink)

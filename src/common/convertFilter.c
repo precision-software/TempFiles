@@ -142,13 +142,13 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
     assert(size >= this->filter.readSize);
     size_t outSize = size;
     size_t nrBlocks = size / this->filter.readSize;
-    size_t inSize = sizeMin(bufferReadSize(this->buf), nrBlocks * this->filter.next->readSize);
+    size_t inSize = sizeMin(bufferDataSize(this->buf), nrBlocks*this->filter.next->readSize);
 
     /* Convert that many bytes if we can. We are active as long as some bytes are created or consumed. */
-    converterProcess(this->converter, buf, &outSize, this->buf->current, &inSize, error);
+    converterProcess(this->converter, buf, &outSize, this->buf->beginData, &inSize, error);
 
     /* Update our buffer to reflect the input bytes we just removed. */
-    this->buf->current += inSize;  if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
+    this->buf->beginData += inSize;  if (bufferIsEmpty(this->buf)) bufferReset(this->buf);
     assert(bufferValid(this->buf));
 
     /* If no bytes were processed, and we had an EOF ... */
@@ -243,7 +243,6 @@ FilterInterface convertInterface = {
         .fnWrite = (FilterWrite)convertFilterWrite,
         .fnClose = (FilterClose) convertFilterClose,
         .fnSize = (FilterSize) convertFilterSize,
-        .fnSeek = (FilterSeek) badSeek,
 };
 
 /**

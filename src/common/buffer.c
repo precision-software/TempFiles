@@ -12,9 +12,9 @@ Write out all data in the buffer, even if the buffer isn't full.
 void bufferForceFlush(Buffer *buf, void *filter, Error *error) /* TODO: pass *error as a param, check + return. */
 {
     /* If the buffer has data to write ... */
-    size_t remaining = bufferReadSize(buf);
+    size_t remaining = bufferDataSize(buf);
     if (remaining > 0)
-        passThroughWriteAll(filter, buf->current, remaining, error);
+        passThroughWriteAll(filter, buf->beginData, remaining, error);
 
     bufferReset(buf);
 }

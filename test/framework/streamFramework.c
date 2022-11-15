@@ -77,6 +77,7 @@ void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
     for (size_t actual, position = 0; position < fileSize; position += actual)
     {
         size_t expected = sizeMin(bufferSize, fileSize-position);
+        memset(buf, 'Y', bufferSize);  // Set a default (failing) pattern before reading.
         actual = fileRead(pipe, buf, bufferSize, &error);
         PG_ASSERT_OK(error);
         PG_ASSERT(verifyBuffer(position, buf, actual));

@@ -19,7 +19,7 @@ typedef struct Buffer
     Byte *beginBuf;   /* The beginning of the buffer */
     Byte *endBuf;     /* The end of the buffer, where size = endBuf - beginBuf */
 
-    Byte *current;    /* Points to current read position in buffer, */
+    Byte *beginData;  /* Points to the beginning of valid data. */
     Byte *endData;    /* Points to the end of valid data, where size = endData - beginData. */
 } Buffer;
 
@@ -28,31 +28,21 @@ inline static size_t sizeMax(size_t size1, size_t size2) {return (size1>size2)? 
 inline static size_t sizeRoundDown(size_t size, size_t itemSize) {return size / itemSize * itemSize;}
 inline static size_t sizeRoundUp(size_t size, size_t itemSize) {return sizeRoundDown(size+itemSize-1, itemSize);}
 
-/** Total size of buffer */
+inline static size_t bufferDataSize(Buffer *this){return this->endData - this->beginData;}
 inline static size_t bufferSize(Buffer *this) {return this->endBuf - this->beginBuf;}
 
-/** Space available to add data to buffer */
 inline static size_t bufferAvailSize(Buffer *this) {return this->endBuf - this->endData;}
 
-/** How much data remains unread */
-inline static size_t bufferReadSize(Buffer *this){return this->endData - this->current;}
-
-/** How much data is in the buffer */
-inline static size_t bufferDataSize(Buffer *this){return this->endData - this->beginBuf;}
-
-
-inline static bool bufferEnd(Buffer *this) {return bufferReadSize(this) == 0;}
 inline static bool bufferIsFull(Buffer *this) {return bufferAvailSize(this) == 0;}
-inline static bool bufferIsEmpty(Buffer *this) {return bufferReadSize(this) == 0;}
+inline static bool bufferIsEmpty(Buffer *this) {return bufferDataSize(this) == 0;}
 
 inline static bool bufferValid(Buffer *this)
-    {return this->endBuf >= this->endData && this->endData >= this->current && this->current >= this->beginBuf;}
+    {return this->endBuf >= this->endData && this->endData >= this->beginData && this->beginData >= this->beginBuf;}
 
 inline static void
 bufferReset(Buffer *this)
 {
-    this->current = this->endData = this->beginBuf;
-    memset(this->beginBuf, 'Y', this->endBuf-this->beginBuf);  // TODO: DEBUG ONLY!!
+    this->beginData = this->endData = this->beginBuf;
 }
 
 inline static size_t toBuffer(Buffer *this, size_t size)
@@ -64,8 +54,8 @@ inline static size_t toBuffer(Buffer *this, size_t size)
 
 inline static size_t fromBuffer(Buffer *this, size_t size)
 {
-    size_t actual = sizeMin(size, bufferReadSize(this));
-    this->current += actual;
+    size_t actual = sizeMin(size, bufferDataSize(this));
+    this->beginData += actual;
     if (bufferIsEmpty(this))
         bufferReset(this);
     return actual;
@@ -77,37 +67,22 @@ copyBytes(Byte *to, Byte *from, size_t size) { memcpy(to, from, size); return si
 inline static size_t
 copyFromBuffer(Buffer *this, Byte *buf, size_t size)
 {
-    return copyBytes(buf, this->current, fromBuffer(this, size)); // TODO: race condition on this->current?
+    Byte *from = this->beginData;
+    return copyBytes(buf, from, fromBuffer(this, size));
 }
 
 inline static size_t
-appendToBuffer(Buffer *this, Byte *buf, size_t size)
+copyToBuffer(Buffer *this, Byte *buf, size_t size)
 {
     Byte *to = this->endData;
     return copyBytes(to, buf, toBuffer(this, size));
-}
-
-inline static size_t
-copyIntoBuffer(Buffer *this, Byte *buf, size_t size)
-{
-    Byte *to = this->current;
-    size_t actual = sizeMin( this->endBuf - this->current, size);
-    copyBytes(to, buf, actual);
-
-    /* Update the pointers to reflect the data we copied into the buffer. */
-    this->current += actual;
-    if (this->current > this->endData)
-        this->endData = this->current;
-
-    assert(bufferValid(this));
-    return actual;
 }
 
 inline static Byte
 readByte(Buffer *this)
 {
     assert(!bufferIsEmpty(this));
-    Byte byte = *this->current++;
+    Byte byte = *this->beginData++;
     if (bufferIsEmpty(this))
         bufferReset(this);
     return byte;

@@ -20,9 +20,17 @@ extern FilterInterface passThroughInterface;
 #define passThroughClose(this, error) passThrough(Close, this, error)
 #define passThroughAbort(this, error)  passThrough(Abort, this, error)
 #define passThroughSync(this, error) passThrough(Sync, this, error)
-#define passThroughSize(this, size) passThrough(Size, this, size)
 #define passThroughSeek(this, position, error) passThrough(Seek, this, position, error)
+//#define passThroughSize(this, size) passThrough(Size, this, size);
 
+
+inline static size_t passThroughSize(Filter *this, size_t size)
+{
+    size_t result = passThrough(Size, this, size);
+    if (this->next)
+        printf("in=%zu  out=%zu  this=%p  next->readSize=%zu  next->writeSize=%zu\n", size, result, this, this->next->readSize, this->next->writeSize);
+    return result;
+}
 /* Helper function to ensure all the data is written. */
 size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error);
 size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
