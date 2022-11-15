@@ -2,8 +2,8 @@
 // Created by John Morris on 10/20/22.
 //
 
-#ifndef FILTER_UNITTEST_H
-#define FILTER_UNITTEST_H
+#ifndef FILTER_UNITTESTFRAMEWORK_H
+#define FILTER_UNITTESTFRAMEWORK_H
 
 #include "framework/unitTestInternal.h"
 void testMain(void);
@@ -14,4 +14,4 @@ int main()
 }
 
 
-#endif //FILTER_UNITTEST_H
+#endif //FILTER_UNITTESTFRAMEWORK_H

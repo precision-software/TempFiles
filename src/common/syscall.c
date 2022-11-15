@@ -86,3 +86,16 @@ void sys_datasync(int fd, Error *error)
     if (fdatasync(fd) == -1 && errorIsOK(*error))
         *error = systemError();
 }
+
+/**
+ * Seek to an absolute file position.
+ */
+void sys_lseek(int fd, size_t position, Error *error)
+{
+    if (isError(*error))
+        return;
+
+    off_t ret = lseek(fd, position, SEEK_SET);
+    if (ret == -1)
+        *error = systemError();
+}

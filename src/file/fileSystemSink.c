@@ -17,6 +17,7 @@ struct FileSystemSink {
     bool writable;   /* Can we write to the file? */
     bool readable;   /* Can we read from the file? */
     bool eof;        /* Has the currently open file read past eof? */
+    size_t blockSize; /* The recommended size for I/O. BufferedFile will attempt to align */
 };
 
 static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
@@ -113,7 +114,7 @@ void fileSystemSync(FileSystemSink *this, Error *error)
 size_t fileSystemSize(FileSystemSink *this, size_t size)
 {
     this->filter.writeSize = size;
-    this->filter.readSize = 16*1024;
+    this->filter.readSize = this->blockSize;
     return this->filter.readSize;
 }
 
@@ -128,6 +129,11 @@ void fileSystemAbort(FileSystemSink *this, Error *errorO)
     abort(); /* TODO: not implemented. */
 }
 
+void fileSystemSeek(FileSystemSink *this, size_t position, Error *error)
+{
+    sys_lseek(this->fd, position, error);
+}
+
 
 FilterInterface fileSystemInterface = (FilterInterface)
 {
@@ -138,18 +144,24 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnSync = (FilterSync)fileSystemSync,
     .fnSize = (FilterSize)fileSystemSize,
     .fnAbort = (FilterAbort)fileSystemAbort,
+    .fnSeek = (FilterSeek)fileSystemSeek
 };
 
 
 /**
  * Create a new Posix file system Sink.
  */
-Filter *fileSystemSinkNew()
+Filter *fileSystemSinkNew(size_t blockSize)
 {
+    /* Default block size, good for streaming */
+    if (blockSize == 0)
+        blockSize = 16*1024*1024;
+
     FileSystemSink *this = malloc(sizeof(FileSystemSink));
     *this = (FileSystemSink)
     {
         .fd = -1,
+        .blockSize = blockSize,
         .filter = (Filter){
             .iface=&fileSystemInterface,
             .next=NULL}

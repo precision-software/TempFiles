@@ -10,7 +10,7 @@
 #include "file/bufferStream.h"
 #include "file/fileSystemSink.h"
 
-#include "framework/streamTest.h"
+#include "framework/streamFramework.h"
 
 
 void testMain()
@@ -27,7 +27,7 @@ void testMain()
                         (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                         (Byte *)"FEDCBA9876543210FEDCBA9876543210", 32,
                         fileSplitFilterNew(1024 * 1024, formatPath, "%s-%06d.seg",
-                            fileSystemSinkNew())))));
+                            fileSystemSinkNew(0))))));
 
     streamTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat");
 }

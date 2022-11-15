@@ -7,7 +7,7 @@
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
-#include "framework/streamTest.h"
+#include "framework/streamFramework.h"
 
 
 void testMain()
@@ -19,7 +19,7 @@ void testMain()
             fileSourceNew(
                     bufferStreamNew(
                             fileSplitFilterNew(1024 * 1024,formatPath, "%s-%06d.seg",
-                                               fileSystemSinkNew())));
+                                               fileSystemSinkNew(0))));
     streamTest(split, TEST_DIR "split/testfile_%u_%u");
 
     //splitVerify("Split into multiple files: verify files");

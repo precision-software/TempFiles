@@ -91,7 +91,8 @@ size_t openSSLConverterEnd(OpenSSLConverter *this, Byte *outBuf, size_t outSize,
 
     EVP_CIPHER_free(this->cipher);
     EVP_CIPHER_CTX_free(this->ctx);
-    this->ctx = this->cipher = NULL;
+    this->ctx = NULL;
+    this->cipher = NULL;
 
     return outlen;
 }

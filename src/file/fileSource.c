@@ -37,6 +37,11 @@ size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error)
     return passThroughReadAll(this, buf, bufSize, error);
 }
 
+void fileSeek(FileSource *this, size_t position, Error *error)
+{
+    passThroughSeek(this, position, error);
+}
+
 /**
  * Close a file.
  */

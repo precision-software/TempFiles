@@ -133,7 +133,7 @@ ConverterIface lz4CompressIface =
 Converter *lz4CompressNew()
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
-    *this = (Lz4Compress){0};
+    *this = (Lz4Compress){.preferences = (LZ4F_preferences_t){.autoFlush=1}};
     return converterNew(this, &lz4CompressIface);
 }
 

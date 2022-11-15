@@ -9,8 +9,8 @@
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
-#include "framework/streamTest.h"
-#include "framework/unitTest.h"
+#include "framework/streamFramework.h"
+#include "framework/unitFramework.h"
 
 void streamTest(FileSource *pipe, char *nameFmt);
 

@@ -7,7 +7,7 @@
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
-#include "framework/streamTest.h"
+#include "framework/streamFramework.h"
 
 
 void testMain()
@@ -18,7 +18,7 @@ void testMain()
     FileSource *lz4 = fileSourceNew(
             lz4FilterNew(16*1024,
                     bufferStreamNew(
-                            fileSystemSinkNew())));
+                            fileSystemSinkNew(0))));
 
     singleStreamTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1048576, 1024);
 

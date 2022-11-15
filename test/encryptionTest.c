@@ -6,7 +6,7 @@
 #include "encrypt/openSSL/openSSL.h"
 #include "file/fileSource.h"
 
-#include "framework/streamTest.h"
+#include "framework/streamFramework.h"
 
 
 void testMain()
@@ -21,7 +21,7 @@ void testMain()
                     "AES-256-CBC",
                     (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                     (Byte *)"FEDCBA9876543210FEDCBA9876543210", 32,
-                    fileSystemSinkNew())));
+                    fileSystemSinkNew(0))));
 
     streamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat");
 }
