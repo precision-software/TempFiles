@@ -1,7 +1,7 @@
 /*  */
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/bufferSeek.h"
+#include "file/blockify.h"
 #include "file/fileSystemSink.h"
 #include "file/fileSource.h"
 
@@ -17,7 +17,7 @@ void testMain()
 
     beginTestGroup("Buffered Seeks");
 
-    FileSource *seek = fileSourceNew(bufferSeekNew(1024, fileSystemSinkNew(1024)));
+    FileSource *seek = fileSourceNew(blockifyNew(1024, fileSystemSinkNew(1024)));
 
     singleSeekTest(seek, name, 1024*1024, 2037);
     seekTest(seek, name);

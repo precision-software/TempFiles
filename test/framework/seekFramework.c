@@ -3,7 +3,7 @@
 //
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/bufferSeek.h"
+#include "file/blockify.h"
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"

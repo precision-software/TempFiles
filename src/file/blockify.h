@@ -7,7 +7,7 @@
 
 #include "common/filter.h"
 
-typedef struct BufferSeek BufferSeek;
-Filter *bufferSeekNew(size_t blockSize, Filter *next);
+typedef struct Blockify Blockify;
+Filter *blockifyNew(size_t blockSize, Filter *next);
 
 #endif /*UNTITLED1_BufferStream_H */

@@ -1,9 +1,9 @@
 /**
- * BufferSeek reconciles a byte stream input with an output of fixed size blocks.
+ * Blockify reconciles a byte stream input with an output of fixed size blocks.
  * Because output blocks are fixed size, it is possible to do random Seeks
  * and Writes to the output file.
  *
- * BufferSeek replicates the functionality of fread/fwrite/fseek.
+ * Blockify replicates the functionality of fread/fwrite/fseek.
  * It is not compatible with subsequent streaming filters which change the size
  * of the output blocks.
  *  - If the subsequent filters generate variable size blocks (eg. compression)
@@ -11,7 +11,7 @@
  *  - If the subsequent filters have fixed but unaligned blocks, then
  *    a single random write can translate into 4 physical disk I/Os.
  *
- * Note that BufferSeek can support O_DIRECT files if the last block is padded.
+ * Note that Blockify can support O_DIRECT files if the last block is padded.
  *
  * Some logical assertions:
  *    1) All I/Os to actual file are block aligned.  ("actual file" means next stage in pipeline.)
@@ -30,14 +30,14 @@
 #include "common/buffer.h"
 #include "common/passThrough.h"
 
-#include "bufferSeek.h"
+#include "blockify.h"
 
 #define palloc malloc
 
 /**
  * Structure containing the state of the stream, including its buffer.
  */
-struct BufferSeek
+struct Blockify
 {
     Filter filter;        /* Common to all filters */
 
@@ -58,15 +58,15 @@ struct BufferSeek
 
 
 /* Forward references */
-void writeBlock(BufferSeek *this, size_t position, Error *error);
-void readBlock(BufferSeek *this, size_t position, Error *error);
-void flushCurrentBlock(BufferSeek *this, Error *error);
-void fillCurrentBlock(BufferSeek *this, Error *error);
+void writeBlock(Blockify *this, size_t position, Error *error);
+void readBlock(Blockify *this, size_t position, Error *error);
+void flushCurrentBlock(Blockify *this, Error *error);
+void fillCurrentBlock(Blockify *this, Error *error);
 
 /**
  * Open a buffered file, reading, writing or both.
  */
-Error bufferSeekOpen(BufferSeek *this, char *path, int mode, int perm)
+Error blockifyOpen(Blockify *this, char *path, int mode, int perm)
 {
     /* Are we read/writing or both? */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
@@ -92,7 +92,7 @@ Error bufferSeekOpen(BufferSeek *this, char *path, int mode, int perm)
 /*
  * A debug function to verify the various buffer pointers are consistent with each other.
  */
-static void checkBuffer(BufferSeek(*this))
+static void checkBuffer(Blockify(*this))
 {
     assert(this->fileSize >= this->blockPosition + this->blockActual);
     assert(this->blockPosition <= this->position);
@@ -105,7 +105,7 @@ static void checkBuffer(BufferSeek(*this))
 
 
 
-static void flushBuffer(BufferSeek *this, Error *error)
+static void flushBuffer(Blockify *this, Error *error)
 {
     /* Check for holes. */
     //if (this->position > this->fileSize)
@@ -117,7 +117,7 @@ static void flushBuffer(BufferSeek *this, Error *error)
     this->dirty = false;
 }
 
-static void nextBuffer(BufferSeek *this, Error *error)
+static void nextBuffer(Blockify *this, Error *error)
 {
     /* If we are positioned at the end of the current buffer, ... */
     if (this->blockActual > 0 && this->position >= this->blockPosition + this->blockSize)
@@ -137,7 +137,7 @@ static void nextBuffer(BufferSeek *this, Error *error)
 }
 
 
-static void fillBuffer (BufferSeek *this, Error *error)
+static void fillBuffer (Blockify *this, Error *error)
 {
     if (this->blockActual == 0)
     {
@@ -148,7 +148,7 @@ static void fillBuffer (BufferSeek *this, Error *error)
     }
 }
 
-static size_t copyIn(BufferSeek *this, Byte *buf, size_t size)
+static size_t copyIn(Blockify *this, Byte *buf, size_t size)
 {
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockSize-offset, size);
@@ -156,7 +156,7 @@ static size_t copyIn(BufferSeek *this, Byte *buf, size_t size)
     return actual;
 }
 
-static size_t copyOut(BufferSeek *this, Byte *buf, size_t size)
+static size_t copyOut(Blockify *this, Byte *buf, size_t size)
 {
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockActual-offset, size);
@@ -168,7 +168,7 @@ static size_t copyOut(BufferSeek *this, Byte *buf, size_t size)
 /**
  * Write data to the buffered file.
  */
-size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t size, Error* error)
+size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -226,7 +226,7 @@ size_t bufferSeekWrite(BufferSeek *this, Byte *buf, size_t size, Error* error)
  * Read bytes from the buffered stream.
  * Note it may take multiple reads to get all the data or to reach EOF.
  */
-size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
+size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -293,7 +293,7 @@ size_t bufferSeekRead(BufferSeek *this, Byte *buf, size_t size, Error *error)
 /**
  * Seek to a position
  */
-void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
+void blockifySeek(Blockify *this, size_t position, Error *error)
 {
     if (isError(*error))
         return;
@@ -323,7 +323,7 @@ void bufferSeekSeek(BufferSeek *this, size_t position, Error *error)
 /**
  * Close the buffered file.
  */
-void bufferSeekClose(BufferSeek *this, Error *error)
+void blockifyClose(Blockify *this, Error *error)
 {
     /* Flush our buffers. */
     flushBuffer(this, error);
@@ -338,7 +338,7 @@ void bufferSeekClose(BufferSeek *this, Error *error)
 /**
  * Synchronize any written data to persistent storage.
  */
-void bufferSeekSync(BufferSeek *this, Error *error)
+void blockifySync(Blockify *this, Error *error)
 {
     /* Flush our buffers. */
     //bufferForceFlush(this->buf, this, error);
@@ -357,7 +357,7 @@ void bufferSeekSync(BufferSeek *this, Error *error)
  * Question: should we throw error if our requested blocksize doesn't
  * match downstream block size?  TODO:
  */
-size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
+size_t blockifySize(Blockify *this, size_t writeSize)
 {
     assert(writeSize > 0);
     /* We don't change the size of data as it passes through, although we may set a larger block size. */
@@ -372,25 +372,25 @@ size_t bufferSeekSize(BufferSeek *this, size_t writeSize)
 }
 
 
-FilterInterface bufferSeekInterface = (FilterInterface)
+FilterInterface blockifyInterface = (FilterInterface)
         {
-                .fnOpen = (FilterOpen)bufferSeekOpen,
-                .fnWrite = (FilterWrite)bufferSeekWrite,
-                .fnClose = (FilterClose)bufferSeekClose,
-                .fnRead = (FilterRead)bufferSeekRead,
-                .fnSync = (FilterSync)bufferSeekSync,
-                .fnSize = (FilterSize)bufferSeekSize,
-                .fnSeek = (FilterSeek)bufferSeekSeek,
+                .fnOpen = (FilterOpen)blockifyOpen,
+                .fnWrite = (FilterWrite)blockifyWrite,
+                .fnClose = (FilterClose)blockifyClose,
+                .fnRead = (FilterRead)blockifyRead,
+                .fnSync = (FilterSync)blockifySync,
+                .fnSize = (FilterSize)blockifySize,
+                .fnSeek = (FilterSeek)blockifySeek,
         } ;
 
 /***********************************************************************************************************************************
 Create a new buffer filter object.
 It allocates an output buffer which matches the block size of the next filter in the pipeline.
 ***********************************************************************************************************************************/
-Filter *bufferSeekNew(size_t blockSize, Filter *next)
+Filter *blockifyNew(size_t blockSize, Filter *next)
 {
-    BufferSeek *this = palloc(sizeof(BufferSeek));
+    Blockify *this = palloc(sizeof(Blockify));
     this->blockSize = blockSize;
 
-    return filterInit(this, &bufferSeekInterface, next);
+    return filterInit(this, &blockifyInterface, next);
 }

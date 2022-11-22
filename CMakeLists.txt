@@ -14,7 +14,7 @@ add_executable(bufferTest test/bufferTest.c
         src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
         src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/bufferSeek.c src/file/bufferSeek.h)
+        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/blockify.c src/file/blockify.h)
 
 add_executable(fileSplitTest test/fileSplitTest.c src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
         test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitFramework.h
@@ -61,8 +61,8 @@ target_link_libraries(kitchenSinkTest PUBLIC lz4 crypto)
 add_executable(seekTest test/seekTest.c
         test/framework/unitTestInternal.h test/framework/seekFramework.c test/framework/seekFramework.h test/framework/unitFramework.h
         src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/bufferSeek.c src/file/bufferSeek.h
+        src/common/passThrough.c src/common/passThrough.h src/file/blockify.c src/file/blockify.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
         src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/bufferSeek.c src/file/bufferSeek.h)
+        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/blockify.c src/file/blockify.h)
