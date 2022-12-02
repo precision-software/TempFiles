@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <sys/fcntl.h>
 
-#include "encrypt/openSSL/openSSL.h"
+#include "encrypt/openSSL/encrypt.h"
 #include "fileSplit/fileSplit.h"
 #include "compress/lz4/lz4.h"
 
 #include "file/fileSource.h"
-#include "file/bufferStream.h"
+#include "file/byteStream.h"
 #include "file/fileSystemSink.h"
 
 #include "framework/streamFramework.h"
@@ -20,7 +20,7 @@ void testMain()
     beginTestGroup("Kitchen Sink");
     FileSource *stream =
         fileSourceNew(
-            bufferStreamNew(
+            byteStreamNew(
                 lz4FilterNew(16*1024,
                     openSSLNew(
                         "AES-256-CBC",

@@ -7,7 +7,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#include "encrypt/openSSL/openSSL.h"
+#include "encrypt/openSSL/encrypt.h"
 #include "common/convertFilter.h"
 #include "common/filter.h"
 

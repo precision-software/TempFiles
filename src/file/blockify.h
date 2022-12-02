@@ -10,4 +10,4 @@
 typedef struct Blockify Blockify;
 Filter *blockifyNew(size_t blockSize, Filter *next);
 
-#endif /*UNTITLED1_BufferStream_H */
+#endif /*UNTITLED1_ByteStream_H */

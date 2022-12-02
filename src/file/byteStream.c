@@ -8,14 +8,14 @@
 #include "common/buffer.h"
 #include "common/passThrough.h"
 
-#include "bufferStream.h"
+#include "byteStream.h"
 
 #define palloc malloc
 
 /**
  * Structure containing the state of the stream, including its buffer.
  */
-struct BufferStream
+struct ByteStream
 {
     Filter filter;        /* Common to all filters */
     Buffer *buf;          /* Local buffer */
@@ -27,7 +27,7 @@ struct BufferStream
 };
 
 static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="BufferStream can't read and write the same stream", .causedBy=NULL};
+        (Error) {.code=errorCodeFilter, .msg="ByteStream can't read and write the same stream", .causedBy=NULL};
 
 /**
  * Negotiate buffer sizes needed by neighboring filters.
@@ -35,7 +35,7 @@ static const Error errorCantBothReadWrite =
  * single byte blocks (or larger) from upstream, and we match whatever
  * block size is requested downstream.
  */
-size_t bufferStreamSize(BufferStream *this, size_t writeSize)
+size_t byteStreamSize(ByteStream *this, size_t writeSize)
 {
     assert(writeSize > 0);
     /* We don't change the size of data when we "transform" it. */
@@ -54,9 +54,14 @@ size_t bufferStreamSize(BufferStream *this, size_t writeSize)
 /**
  * Open a buffered file, either for reading or writing.
  */
-Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
+Error byteStreamOpen(ByteStream *this, char *path, int mode, int perm)
 {
-    /* We support I/O in only one direction per open. */
+    /*
+     * We support I/O in only one direction at a time. If positioned
+     * at EOF, then write only.  If positioned at BOF, then read only.
+     * However, a write can be done at any record boundary, transforming
+     * the current position to EOF (write only) from there on.
+     * */
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->writeable = (mode & O_ACCMODE) != O_RDONLY;
     this->dirty = false;
@@ -71,7 +76,7 @@ Error bufferStreamOpen(BufferStream *this, char *path, int mode, int perm)
 /**
  * Write data to the buffered stream.
  */
-size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* error)
+size_t byteStreamWrite(ByteStream *this, Byte *buf, size_t bufSize, Error* error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -95,7 +100,7 @@ size_t bufferStreamWrite(BufferStream *this, Byte *buf, size_t bufSize, Error* e
  * Read data from the buffered stream.
  *  Note our read request must be at least as large as our successor's block size.
  */
-size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *error)
+size_t byteStreamRead(ByteStream *this, Byte *buf, size_t bufSize, Error *error)
 {
     if (!errorIsOK(*error))
         return 0;
@@ -123,7 +128,7 @@ size_t bufferStreamRead(BufferStream *this, Byte *buf, size_t bufSize, Error *er
 /**
  * Close the buffered stream.
  */
-void bufferStreamClose(BufferStream *this, Error *error)
+void byteStreamClose(ByteStream *this, Error *error)
 {
     /* Flush our buffers. */
     bufferForceFlush(this->buf, this, error);
@@ -138,7 +143,7 @@ void bufferStreamClose(BufferStream *this, Error *error)
 /**
  * Synchronize any written data to persistent storage.
  */
-void bufferStreamSync(BufferStream *this, Error *error)
+void byteStreamSync(ByteStream *this, Error *error)
 {
     /* Flush our buffers. */
     bufferForceFlush(this->buf, this, error);
@@ -147,23 +152,23 @@ void bufferStreamSync(BufferStream *this, Error *error)
     passThroughSync(this, error);
 }
 
-FilterInterface bufferStreamInterface = (FilterInterface)
+FilterInterface byteStreamInterface = (FilterInterface)
 {
-    .fnOpen = (FilterOpen)bufferStreamOpen,
-    .fnWrite = (FilterWrite)bufferStreamWrite,
-    .fnClose = (FilterClose)bufferStreamClose,
-    .fnRead = (FilterRead)bufferStreamRead,
-    .fnSync = (FilterSync)bufferStreamSync,
-    .fnSize = (FilterSize)bufferStreamSize,
+    .fnOpen = (FilterOpen)byteStreamOpen,
+    .fnWrite = (FilterWrite)byteStreamWrite,
+    .fnClose = (FilterClose)byteStreamClose,
+    .fnRead = (FilterRead)byteStreamRead,
+    .fnSync = (FilterSync)byteStreamSync,
+    .fnSize = (FilterSize)byteStreamSize,
 } ;
 
 /***********************************************************************************************************************************
 Create a new buffer filter object.
 It allocates an output buffer which matches the block size of the next filter in the pipeline.
 ***********************************************************************************************************************************/
-Filter *bufferStreamNew(Filter *next)
+Filter *byteStreamNew(Filter *next)
 {
-    BufferStream *this = palloc(sizeof(BufferStream));
+    ByteStream *this = palloc(sizeof(ByteStream));
 
-    return filterInit(this, &bufferStreamInterface, next);
+    return filterInit(this, &byteStreamInterface, next);
 }

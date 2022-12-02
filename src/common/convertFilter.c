@@ -127,10 +127,7 @@ size_t convertFilterRead(ConvertFilter *this, Byte *buf, size_t size, Error *err
 {
     /* First, check if we have encountered EOF on a previous read. */
     if (this->eof)
-    {
-        *error = errorEOF;
-        return 0;
-    }
+        return setError(error, errorEOF);
 
     /* Try to read downstream data into our buffer if it is empty. */
     bufferFill(this->buf, this, error);

@@ -75,6 +75,7 @@ typedef void (*FilterSync)(void *this, Error *error);
 typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
 typedef void (*FilterSeek)(void *this, size_t position, Error *error);
+typedef void (*FilterBlock)(void *this, Error *error);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -85,6 +86,7 @@ typedef struct FilterInterface {
     FilterAbort fnAbort;
     FilterSize fnSize;
     FilterSeek fnSeek;
+    FilterBlock fnBlock;
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */

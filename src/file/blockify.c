@@ -105,27 +105,31 @@ static void checkBuffer(Blockify(*this))
 
 
 
-static void flushBuffer(Blockify *this, Error *error)
+static bool flushBuffer(Blockify *this, Error *error)
 {
     /* Check for holes. */
-    //if (this->position > this->fileSize)
-     //   return (void) filterError(error, "Positioned beyond End-Of-File - holes not allowed.");
+    if (this->position > this->fileSize)
+        return filterError(error, "Positioned beyond End-Of-File - holes not allowed.");
 
     /* if the block is dirty, flush it. */
     if (this->dirty && this->blockActual > 0)
         passThroughWriteAll(this, this->buf, this->blockActual, error);
     this->dirty = false;
+
+    return isError(*error);
 }
 
-static void nextBuffer(Blockify *this, Error *error)
+/*
+ * Advance to the next buffer if we are at the end of the current buffer.
+ */
+static bool nextBuffer(Blockify *this, Error *error)
 {
     /* If we are positioned at the end of the current buffer, ... */
     if (this->blockActual > 0 && this->position >= this->blockPosition + this->blockSize)
     {
         /* Write out the current buffer if dirty */
-        flushBuffer(this, error);
-        if (isError(*error))
-            return;
+        if (flushBuffer(this, error))
+            return true;
 
         /* Position to the beginning of the next buffer */
         this->blockPosition += this->blockSize;
@@ -134,10 +138,12 @@ static void nextBuffer(Blockify *this, Error *error)
         if (this->blockPosition > this->fileSize)
             this->fileSize = this->position;
     }
+
+    return isError(*error);
 }
 
 
-static void fillBuffer (Blockify *this, Error *error)
+static bool fillBuffer (Blockify *this, Error *error)
 {
     if (this->blockActual == 0)
     {
@@ -146,6 +152,8 @@ static void fillBuffer (Blockify *this, Error *error)
         if (this->blockPosition + this->blockActual > this->fileSize)
             this->fileSize = this->blockPosition + this->blockActual;
     }
+
+    return isError(*error);
 }
 
 static size_t copyIn(Blockify *this, Byte *buf, size_t size)
@@ -170,7 +178,7 @@ static size_t copyOut(Blockify *this, Byte *buf, size_t size)
  */
 size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 {
-    if (!errorIsOK(*error))
+    if (isError(*error))
         return 0;
 
     /* Advance to next buffer if appropriate. */
@@ -341,10 +349,16 @@ void blockifyClose(Blockify *this, Error *error)
 void blockifySync(Blockify *this, Error *error)
 {
     /* Flush our buffers. */
-    //bufferForceFlush(this->buf, this, error);
+    flushBuffer(this, error);
 
     /* Pass on the sync request */
     passThroughSync(this, error);
+}
+
+void blockifyEndRecord(Blockify *this, Error *error)
+{
+    /* Flush out buffers */
+    flushBuffer(this, error);
 }
 
 
