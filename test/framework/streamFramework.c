@@ -3,14 +3,13 @@
 //
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/byteStream.h"
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
 #include "framework/streamFramework.h"
-#include "framework/unitFramework.h"
+#include "framework/unitTest.h"
 
 void streamTest(FileSource *pipe, char *nameFmt);
 
@@ -50,6 +49,7 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
 void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     Error error = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0);
+    PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
 
     size_t position;
@@ -71,7 +71,6 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     Error error = fileOpen(pipe, path, O_RDONLY, 0);
-    bufferSize = sizeMax(bufferSize, ((Filter*)pipe)->readSize);
     Byte *buf = malloc(bufferSize);
 
     for (size_t actual, position = 0; position < fileSize; position += actual)
@@ -101,7 +100,6 @@ void verifyRandomFile(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
 
     Error error = fileOpen(pipe, fileName, O_RDONLY, 0);
     PG_ASSERT_OK(error);
-    blockSize = sizeMax(blockSize, ((Filter*)pipe)->readSize);
     Byte *buf = malloc(blockSize);
 
     size_t nrBlocks = (fileSize + blockSize -1) / blockSize;

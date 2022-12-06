@@ -4,12 +4,14 @@
  * It doesn't do much on its own, as it is
  * more a placeholder for sending events further down the pipeline.
  */
+#include <stdlib.h>
+#include <sys/fcntl.h>
 #include "common/passThrough.h"
 #include "fileSource.h"
 
 struct FileSource {
     Filter filter;
-    bool initialized;
+    size_t blockSize;
 };
 
 /**
@@ -17,7 +19,20 @@ struct FileSource {
  */
 Error fileOpen(FileSource *this, char *path, int mode, int perm)
 {
-    return passThroughOpen(this, path, mode, perm);
+    /* Appending to a file is tricky for encrypted/compressed files. */
+    bool append = (mode & O_APPEND) != 0;
+    mode &= (~O_APPEND);
+
+    /* Open the file */
+    Error error = passThroughOpen(this, path, mode, perm);
+    if (errorIsOK(error))
+        passThroughBlockSize(this, this->blockSize, &error);
+
+    /* If we are appending, then seek to the end of the file */
+    if (append)
+        fileSeek(this, FILE_END_POSITION, &error);  /* TODO: EOF or last block? */
+
+    return error;
 }
 
 /**
@@ -32,14 +47,14 @@ size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error)
 /**
  * Read data from a file.
  */
-size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error)
+size_t fileRead(FileSource *this, Byte *buf, size_t size, Error *error)
 {
-    return passThroughReadAll(this, buf, bufSize, error);
+    return passThroughReadAll(this, buf, size, error);
 }
 
-void fileSeek(FileSource *this, size_t position, Error *error)
+pos_t fileSeek(FileSource *this, pos_t position, Error *error)
 {
-    passThroughSeek(this, position, error);
+    return passThroughSeek(this, position, error);
 }
 
 /**
@@ -63,8 +78,7 @@ fileSourceNew(Filter *next)
     FileSource *this = malloc(sizeof(FileSource));
     filterInit(this, &passThroughInterface, next);
 
-    this->filter.writeSize = 16*1024;   /* Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary. */
-    this->filter.readSize = passThroughSize(this, 16*1024);
+    this->blockSize = 16*1024;   /* Suggest size for efficiency on writes. Having a buffer below us makes this unnecessary. */
 
     return this;
 }

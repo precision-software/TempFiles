@@ -3,7 +3,7 @@
 //
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/blockify.h"
+#include "file/buffered.h"
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
@@ -71,7 +71,6 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     Error error = fileOpen(pipe, path, O_RDONLY, 0);
-    bufferSize = sizeMax(bufferSize, ((Filter*)pipe)->readSize);
     Byte *buf = malloc(bufferSize);
 
     for (size_t actual, position = 0; position < fileSize; position += actual)
@@ -102,6 +101,7 @@ void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 {
     /* Start out by allocating space and filling the file with "X"s. */
     Error error = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0);
+    PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
     memset(buf, 'X', bufferSize);
 
@@ -130,7 +130,6 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
 
     Error error = fileOpen(pipe, path, O_RDWR, 0);
     PG_ASSERT_OK(error);
-    blockSize = sizeMax(blockSize, ((Filter *) pipe)->readSize);
     Byte *buf = malloc(blockSize);
 
 
@@ -156,6 +155,31 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     PG_ASSERT_OK(error);
 }
 
+void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
+{
+    Error error = fileOpen(pipe, path, O_RDWR, 0);
+    PG_ASSERT_OK(error);
+    Byte *buf = malloc(blockSize);
+
+    /* Seek to the end of the file */
+    pos_t endPosition = fileSeek(pipe, FILE_END_POSITION, &error);
+    PG_ASSERT_OK(error);
+    PG_ASSERT_EQ(fileSize, endPosition);
+
+    /* Write a new block at the end of file */
+    generateBuffer(endPosition, buf, blockSize);
+
+    /* Write the block */
+    size_t actual = fileWrite(pipe, buf, blockSize, &error);
+    PG_ASSERT_OK(error);
+    PG_ASSERT_EQ(actual, blockSize);
+
+    /* Close the file and verify it is correct. */
+    fileClose(pipe, &error);
+    PG_ASSERT_OK(error);
+
+    verifyFile(pipe, path, fileSize+blockSize, blockSize);
+}
 
 /*
  * Verify a file has the correct data through randomlike seeks.
@@ -165,11 +189,10 @@ void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bloc
 {
     Error error = fileOpen(pipe, path, O_RDONLY, 0);
     PG_ASSERT_OK(error);
-    blockSize = sizeMax(blockSize, ((Filter*)pipe)->readSize);
     Byte *buf = malloc(blockSize);
 
     size_t nrBlocks = (fileSize + blockSize -1) / blockSize;
-    assert (nrBlocks == 0 || (nrBlocks % prime) != 0);
+    PG_ASSERT(nrBlocks == 0 || (nrBlocks % prime) != 0);
     for (size_t idx = 0;  idx < nrBlocks; idx++)
     {
         /* Pick a pseudo-random block and read it */

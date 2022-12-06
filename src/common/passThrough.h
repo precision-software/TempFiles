@@ -21,8 +21,7 @@ extern FilterInterface passThroughInterface;
 #define passThroughAbort(this, error)  passThrough(Abort, this, error)
 #define passThroughSync(this, error) passThrough(Sync, this, error)
 #define passThroughSeek(this, position, error) passThrough(Seek, this, position, error)
-#define passThroughEndRecord(this, error) passThrough(Block, this, error)
-#define passThroughSize(this, size) passThrough(Size, this, size)
+#define passThroughBlockSize(this, size, error) passThrough(BlockSize, this, size, error)
 
 
 /* Helper function to ensure all the data is written. */

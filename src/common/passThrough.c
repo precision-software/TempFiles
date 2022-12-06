@@ -48,7 +48,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
     size_t totalSize = 0;
 
     /* Repeat until all the bytes are read (or EOF) */
-    while (size >= this->readSize && errorIsOK(*error))
+    while (size > 0 && errorIsOK(*error))
     {
         /* Issue the next read, exiting on error or eof. Note size must be >= this->readSize. */
         size_t actualSize = passThroughRead(this, buf, size, error);
@@ -69,14 +69,12 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 /**
  * A Dummy size function, just as a placeholder.
  */
-size_t dummySize(Filter *this, size_t size)
+size_t dummyBlockSize(Filter *this, size_t size, Error *error)
 {
-    this->writeSize = size;
-    this->readSize = passThroughSize(this, size);
-    return this->readSize;
+    return passThroughBlockSize(this, size, error);
 }
 
 /*
  * Defines a "no-op" filter, mainly to use as a placeholder.
  */
-FilterInterface passThroughInterface = (FilterInterface) {.fnSize = (FilterSize)dummySize};
+FilterInterface passThroughInterface = (FilterInterface) {.fnBlockSize = (FilterBlockSize)dummyBlockSize};

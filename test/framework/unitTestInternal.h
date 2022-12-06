@@ -6,6 +6,7 @@
 #define FILTER_UNITTESTINTERNAL_H
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define TEST_DIR "/tmp/pgtest/"
 
@@ -44,9 +45,9 @@ static const char *expectFmt = "Expected '%s' but got '%s'";
 
 #define PG_ASSERT_FMT(fmt, ...)                                                                                        \
     BEGIN                                                                                                              \
-        char _buf[256];                                                                                                 \
-        snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__);                                                                       \
-        PG_ASSERT_MSG(_buf);                                                                                            \
+        char _buf[256];                                                                                                \
+        snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__);                                                                \
+        PG_ASSERT_MSG(_buf);                                                                                           \
     END
 
 #define PG_ASSERT_MSG(msg)                                                                                             \
@@ -55,7 +56,7 @@ static const char *expectFmt = "Expected '%s' but got '%s'";
 #define PG_ASSERT(expr)                                                                                                \
     BEGIN                                                                                                              \
         if (!(expr))                                                                                                   \
-            PG_ASSERT_MSG("'" #expr "' is false");                                                            \
+            PG_ASSERT_MSG("'" #expr "' is false");                                                                     \
     END
 
 static void beginTestGroup(char *name) {fprintf(stderr, "Begin Testgroup %s\n", name);}

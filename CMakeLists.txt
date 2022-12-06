@@ -7,62 +7,52 @@ link_directories(/opt/local/lib /opt/homebrew/Cellar/openssl@1.1/1.1.1s/lib)
 #link_libraries(malloc_ss)
 
 
-add_executable(byteStreamTest test/byteStreamTest.c
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitFramework.h
+
+add_executable(rawTest test/rawTest.c
+        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/byteStream.c src/file/byteStream.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/blockify.c src/file/blockify.h)
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h)
 
-add_executable(fileSplitTest test/fileSplitTest.c src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitFramework.h
+add_executable(rawSeekTest test/rawSeekTest.c
+        test/framework/unitTestInternal.h test/framework/unitTest.h
+        test/framework/seekFramework.c  test/framework/seekFramework.h
         src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/byteStream.c src/file/byteStream.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h)
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h)
 
-add_executable(encryptTest test/encryptionTest.c src/encrypt/openSSL/encrypt.c src/encrypt/openSSL/encrypt.h
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitFramework.h
+
+add_executable(blockifyTest test/blockifyTest.c
+        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/byteStream.c src/file/byteStream.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h  src/common/converter.h)
-target_link_libraries(encryptTest PUBLIC crypto)
-
-add_executable(lz4Test test/lz4Test.c src/compress/lz4/lz4.c  src/compress/lz4/lz4.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/byteStream.c src/file/byteStream.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h test/framework/unitTestInternal.h test/framework/streamFramework.c
-        test/framework/streamFramework.h test/framework/unitFramework.h src/common/converter.h)
-target_link_libraries(lz4Test PUBLIC lz4)
-
-add_executable(kitchenSinkTest test/kitchenSinkTest.c
-        src/compress/lz4/lz4.c src/compress/lz4/lz4.h
-        src/encrypt/openSSL/encrypt.c src/encrypt/openSSL/encrypt.h
-        src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
-        src/common/filter.h src/common/filter.c
-        src/common/passThrough.c src/common/passThrough.h src/file/byteStream.c src/file/byteStream.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h test/framework/unitTestInternal.h test/framework/streamFramework.c
-        test/framework/streamFramework.h test/framework/unitFramework.h src/common/converter.h)
-target_link_libraries(kitchenSinkTest PUBLIC lz4 crypto)
-
+        src/file/buffered.c src/file/buffered.h)
 
 add_executable(seekTest test/seekTest.c
-        test/framework/unitTestInternal.h test/framework/seekFramework.c test/framework/seekFramework.h test/framework/unitFramework.h
+        src/file/buffered.c src/file/buffered.h
+        test/framework/unitTestInternal.h test/framework/unitTest.h
+        test/framework/seekFramework.c  test/framework/seekFramework.h
         src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h src/file/blockify.c src/file/blockify.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h src/common/buffer.c
-        src/common/buffer.h src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h)
+
+
+add_executable(aeadTest test/aeadTest.c
+        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
+        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
+        src/common/filter.c src/common/filter.h
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h
-        src/common/convertFilter.c src/common/convertFilter.h src/common/converter.h src/file/blockify.c src/file/blockify.h)
+        src/file/buffered.c src/file/buffered.h)
+target_link_libraries(aeadTest crypto)

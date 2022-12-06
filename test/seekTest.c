@@ -1,11 +1,11 @@
 /*  */
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/blockify.h"
+#include "file/buffered.h"
 #include "file/fileSystemSink.h"
 #include "file/fileSource.h"
 
-#include "framework/unitFramework.h"
+#include "framework/unitTest.h"
 #include "framework/seekFramework.h"
 
 
@@ -19,6 +19,5 @@ void testMain()
 
     FileSource *seek = fileSourceNew(blockifyNew(1024, fileSystemSinkNew(1024)));
 
-    singleSeekTest(seek, name, 1024*1024, 2037);
     seekTest(seek, name);
 }

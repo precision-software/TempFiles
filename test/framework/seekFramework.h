@@ -2,6 +2,7 @@
 #ifndef FILTER_SEEKFRAMEWORK_H
 #define FILTER_SEEKFRAMEWORK_H
 
+#include "file/fileSource.h"
 #include "framework/unitTestInternal.h"
 
 void seekTest(FileSource *pipe, char *nameFmt);

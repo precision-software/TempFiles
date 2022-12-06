@@ -4,16 +4,13 @@
  * and Writes to the output file.
  *
  * Blockify replicates the functionality of fread/fwrite/fseek.
- * It is not compatible with subsequent streaming filters which change the size
- * of the output blocks.
- *  - If the subsequent filters generate variable size blocks (eg. compression)
- *    there is no easy way to calculate an offset to seek to.
- *  - If the subsequent filters have fixed but unaligned blocks, then
- *    a single random write can translate into 4 physical disk I/Os.
+ * Seeks and O_APPEND are not compatible with subsequent streaming filters which create
+ * variable size blocks. (eg. compression).
  *
- * Note that Blockify can support O_DIRECT files if the last block is padded.
+ * Note that Blockify could support O_DIRECT files if the last block is padded and any
+ * metadata is stored in a separate location. This is a future goal.
  *
- * Some logical assertions:
+ * Some logical assertions about blocks and file position.
  *    1) All I/Os to actual file are block aligned.  ("actual file" means next stage in pipeline.)
  *    2) All I/Os transfer an entire block, except for the final block in the file.
  *    3) The actual file is pre-positioned for the next I/O.
@@ -24,13 +21,14 @@
  *
  * TODO: Open should return a new instance each time, so we can open multiple files at once.
  */
+#include <stdlib.h>
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
+#include <assert.h>
 #include "common/error.h"
-#include "common/buffer.h"
 #include "common/passThrough.h"
 
-#include "blockify.h"
+#include "buffered.h"
 
 #define palloc malloc
 
@@ -62,6 +60,7 @@ void writeBlock(Blockify *this, size_t position, Error *error);
 void readBlock(Blockify *this, size_t position, Error *error);
 void flushCurrentBlock(Blockify *this, Error *error);
 void fillCurrentBlock(Blockify *this, Error *error);
+size_t blockifySeek(Blockify *this, size_t position, Error *error);
 
 /**
  * Open a buffered file, reading, writing or both.
@@ -84,8 +83,10 @@ Error blockifyOpen(Blockify *this, char *path, int mode, int perm)
     this->fileSize = 0;
     this->sizeConfirmed = (mode & O_TRUNC) == O_TRUNC;
 
-    /* Pass the event to the next filter to actually open the file. */
-    return passThroughOpen(this, path, mode, perm);
+    /* Pass the open event to the next filter to actually open the file. */
+    Error error = passThroughOpen(this, path, mode, perm);
+
+    return error;
 }
 
 
@@ -301,10 +302,10 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 /**
  * Seek to a position
  */
-void blockifySeek(Blockify *this, size_t position, Error *error)
+size_t blockifySeek(Blockify *this, size_t position, Error *error)
 {
     if (isError(*error))
-        return;
+        return this->position;
 
     /* If we are moving to a different block ... */
     size_t newBlock = position - position % this->blockSize;
@@ -314,10 +315,13 @@ void blockifySeek(Blockify *this, size_t position, Error *error)
         flushBuffer(this, error);
 
         /* Position to new block in file. */
-        passThroughSeek(this, newBlock, error);
+        size_t actualPosition = passThroughSeek(this, newBlock, error);
         this->blockPosition = newBlock;
         this->blockActual = 0;
     }
+
+    /* Check for positioning beyond end of file */
+    /* TODO: */
 
     /* At this point, we are pointing to the desired block. Update position */
     this->position = position;
@@ -326,6 +330,7 @@ void blockifySeek(Blockify *this, size_t position, Error *error)
     if (this->position > this->fileSize)
         this->fileSize = this->position; // TODO: What about holes?
 
+    return this->position;
 }
 
 /**
@@ -340,6 +345,8 @@ void blockifyClose(Blockify *this, Error *error)
     passThroughClose(this, error);
 
     this->readable = this->writeable = false;
+    if (this->buf != NULL)
+        free(this->buf);
 }
 
 
@@ -355,11 +362,6 @@ void blockifySync(Blockify *this, Error *error)
     passThroughSync(this, error);
 }
 
-void blockifyEndRecord(Blockify *this, Error *error)
-{
-    /* Flush out buffers */
-    flushBuffer(this, error);
-}
 
 
 /**
@@ -369,19 +371,20 @@ void blockifyEndRecord(Blockify *this, Error *error)
  * block size is requested downstream.
  *
  * Question: should we throw error if our requested blocksize doesn't
- * match downstream block size?  TODO:
+ * match downstream block size?  TODO: Work this out, as 1 may be a common block size even when we want buffering.
  */
-size_t blockifySize(Blockify *this, size_t writeSize)
+size_t blockifyBlockSize(Blockify *this, size_t prevSize, Error *error)
 {
-    assert(writeSize > 0);
-    /* We don't change the size of data as it passes through, although we may set a larger block size. */
-    this->filter.writeSize = sizeMax(this->blockSize, writeSize);
-    this->filter.readSize = sizeMax(this->blockSize, passThroughSize(this, writeSize));
+    /* Suggest a block size as 16K rounded up to a multiple of the previous block size. */
+    size_t suggestSize = sizeRoundUp(16*1024, prevSize);
 
-    /* Round the block size up to match the basic block sizes. We can be larger, so just pick the bigger of the two. */
-    size_t bufSize = sizeMax(this->filter.writeSize, this->filter.readSize);
-    this->buf = palloc(bufSize);
+    /* We have a suggested block size. Pass that on, but accept whatever we get back */
+    this->blockSize = passThroughBlockSize(this, suggestSize, error);
 
+    /* Allocate a buffer. */
+    this->buf = palloc(this->blockSize);
+
+    /* Tell the caller we can accept any size. */
     return 1;
 }
 
@@ -393,7 +396,7 @@ FilterInterface blockifyInterface = (FilterInterface)
                 .fnClose = (FilterClose)blockifyClose,
                 .fnRead = (FilterRead)blockifyRead,
                 .fnSync = (FilterSync)blockifySync,
-                .fnSize = (FilterSize)blockifySize,
+                .fnBlockSize = (FilterBlockSize)blockifyBlockSize,
                 .fnSeek = (FilterSeek)blockifySeek,
         } ;
 

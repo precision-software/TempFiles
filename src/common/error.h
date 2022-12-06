@@ -1,15 +1,15 @@
 /***********************************************************************************************************************************
 Error handling.
-   - Errors can be linked, so one error can show which other error "caused" it.
+   - Errors can be nested, so one error can show which other error "caused" it.
    - errorOK and errorEOF are allowable values.
 
-Error handling is intended to of the "short circuit" nature, where an
+Error handling is intended to be the "short circuit" nature, where an
 error variable is both input and output to a function.
  - If the error is already set, the function should do nothing and return.
  - If an error occurs, the other return values should be benign.
 
 As a quick prototype, errors contain static strings.
-  In the long run, errors may need to copy their strings, but we ignore that for the moment.
+  In the long run, errors may need to copy or format their strings, but we ignore that for the moment.
 ***********************************************************************************************************************/
 #ifndef FILTER_ERROR_H
 #define FILTER_ERROR_H
@@ -52,7 +52,7 @@ inline static Error systemError() {return (Error){.code=-errno, .msg=strerror(er
 static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="Not Implemented"};
 
 
-/* Convenience function to update error and return 0 in one statement */
+/* Convenience functions to update error and return 0 in one statement */
 inline static int setError(Error *error, Error newError)
 {
     if (errorIsOK(*error))

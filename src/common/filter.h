@@ -4,50 +4,50 @@
  * A sequence of Filters forms a Pipeline, where the first filter is called
  * a Source and the final filter is called a Sink.
  *
- * Events are geared toward typical file management operations, but new events
+ * Events are geared toward typical file management operations like "Read",
+ * "Write", "Seek" and "Open", but new events
  * can be easily defined. If a filter doesn't recognize an event,
- * the event passes down the pipeline until some filter can process it.
+ * the event passes down the pipeline until some other filter can process it.
+ * (Note that events are implemented as simple procedure calls.)
  *
- * Two of the events, Read and Write, implement the flow of data.
- * As data flows from filter to filter, it may be buffered or transformed.
- * Frequently, the amount of data flowing into a filter and the amount of
- * data flowing fram a filter will be different. Calculating appropriate
- * buffer sizes between multiple filters can be tricky, and a special
- * Size() event helps coordinate this sizing process.
+ * Data flows between filters in fixed size "blocks", where a block is a
+ * chunk of data which fits in memory. A filter transforms data blocks,
+ * changing either the content or the size of the block. Since sizes can change,
+ * block size information is
+ * communicated throughout the pipeline with the "BlockSize" event,
+ * allowing each filter to state its size requirements and to know its neighbor's block size.
  *
- * Reads and Writes do not normally transfer their entire buffers in a single call.
- *   - Writes can try to write larger buffers, but they will typically
- *     be truncated on a block boundary. However, WriteAll will write
- *     the entire buffer, including partial blocks.
- *   - Reads must always request more than this->readSize bytes or there
- *     may not be enough space to transform the data being read.
- *     ReadAll will attempt to read multiple blocks, but it will usually
- *     stop early on a block boundary.
+ * Block sizes between stages do not always match. It is always acceptable for a predecessor's block
+ * size to be a multiple of a successor's block size. If block sizes are otherwise incompatible, it
+ * is possible to insert a "buffer" filter into the stream which buffers data into the appropriate
+ * block size.
  *
- * For both reads and writes, we can allocate larger buffers and transform
- * multiple basic blocks in one call.
-***********************************************************************************************************************************/
+ * The resulting output file consists of a sequence of equally sized blocks, possibly followed by
+ * a final, partial block. Some filters (including compression) may produce variable sized blocks;
+ * those filters need to maintain the appearance of fixed size blocks, even though the resulting
+ * output is not actually fixed size.
+ */
 
 #ifndef UNTITLED1_FILTER_H
 #define UNTITLED1_FILTER_H
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-#include "buffer.h"
+#include "common/error.h"
+
 #define BEGIN do {
 #define END   } while (0)
+
+/* We support 64 bit seeks, either to blocks or bytes. */
+typedef uint64_t pos_t;
+#define FILE_END_POSITION ((pos_t)-1)
 
 /* This structure is an abstract header which is the first element of all filter types. */
 typedef struct Filter {
     struct Filter *next;            /* Points to the next filter in the pipeline */
     struct FilterInterface *iface;  /* The set of functions for processing requests. */
-
-    /* When our predecessor writes to us, we must be prepared to accept this many bytes */
-    size_t  writeSize;
-
-    /* When we read from our successor, we must issue a read with at least this many bytes */
-    size_t  readSize;
 
     /*
      * Passthrough objects, one for each type of event.
@@ -60,7 +60,7 @@ typedef struct Filter {
     struct Filter *nextSync;
     struct Filter *nextClose;
     struct Filter *nextAbort;
-    struct Filter *nextSize;
+    struct Filter *nextBlockSize;
     struct Filter *nextSeek;
 } Filter;
 
@@ -74,8 +74,8 @@ typedef void (*FilterClose)(void *this, Error *error);
 typedef void (*FilterSync)(void *this, Error *error);
 typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
-typedef void (*FilterSeek)(void *this, size_t position, Error *error);
-typedef void (*FilterBlock)(void *this, Error *error);
+typedef pos_t (*FilterSeek)(void *this, pos_t position, Error *error);
+typedef size_t (*FilterBlockSize)(void *this, size_t size, Error *error);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -84,9 +84,8 @@ typedef struct FilterInterface {
     FilterRead fnRead;
     FilterSync fnSync;
     FilterAbort fnAbort;
-    FilterSize fnSize;
+    FilterBlockSize fnBlockSize;
     FilterSeek fnSeek;
-    FilterBlock fnBlock;
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */
@@ -94,5 +93,9 @@ Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
 
 /* Some possibly helpful stubs. */
 void badSeek(Filter *this, size_t position, Error *error);
+
+inline static size_t sizeMin(size_t a, size_t b) {return (a<b)?a:b;}
+inline static size_t sizeMax(size_t a, size_t b) {return (a>b)?a:b;}
+inline static size_t sizeRoundUp(size_t size, size_t factor) {return (size + factor - 1) / factor * factor;}
 
 #endif /*UNTITLED1_FILTER_H */

@@ -87,15 +87,32 @@ void sys_datasync(int fd, Error *error)
         *error = systemError();
 }
 
+/* We don't allow holes so use SEEK_DATA if it is available */
+#ifndef SEEK_DATA
+#define SEEK_DATA SEEK_SET
+#endif
+
 /**
  * Seek to an absolute file position.
  */
-void sys_lseek(int fd, size_t position, Error *error)
+pos_t sys_lseek(int fd, pos_t position, Error *error)
 {
     if (isError(*error))
-        return;
+        return (pos_t)-1;
 
-    off_t ret = lseek(fd, position, SEEK_SET);
+    off_t ret;
+    if (position == FILE_END_POSITION)
+        ret = lseek(fd, 0, SEEK_END);
+
+    else
+    {
+        ret = lseek(fd, (off_t) position, SEEK_SET);
+        if (ret != -1 && ret != position)
+            filterError(error, "Seeking beyond end of file - holes not allowed");
+    }
+
     if (ret == -1)
         *error = systemError();
+
+    return (pos_t)ret;
 }

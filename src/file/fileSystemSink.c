@@ -4,6 +4,7 @@
  * This particular sink works with a Posix file system, and it is
  * a straightforward wrapper around Posix system calls.
  */
+#include <stdlib.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include "common/syscall.h"
@@ -30,7 +31,7 @@ static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered
  */
 Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 {
-    /* Check the mode we are opening the file in. */
+    /* Check the mode we are opening the file in. TODO: move checks to fileSource. */
     this->writable = (mode & O_ACCMODE) != O_RDONLY;
     this->readable = (mode & O_ACCMODE) != O_WRONLY;
     this->eof = false;
@@ -53,7 +54,7 @@ Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
  */
 size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
 {
-    /* Check for errors. */
+    /* Check for errors. TODO: move to fileSource. */
     if (errorIsOK(*error) && !this->writable)
         *error = errorCantWrite;
 
@@ -107,15 +108,13 @@ void fileSystemSync(FileSystemSink *this, Error *error)
 
 /**
  * Negotiate the block size for reading and writing.
- * We declare a large block size to encourage those
- * above us to buffer, but we probably should declare
- * a single byte and let them make their own decisions.
+ * Since we are not supporting O_DIRECT yet, we simply
+ * agree with whatever block size our caller wants.
  */
-size_t fileSystemSize(FileSystemSink *this, size_t size)
+size_t fileSystemBlockSize(FileSystemSink *this, size_t prevSize, Error *error)
 {
-    this->filter.writeSize = size;
-    this->filter.readSize = this->blockSize;
-    return this->filter.readSize;
+    this->blockSize = prevSize;
+    return prevSize;
 }
 
 
@@ -129,9 +128,9 @@ void fileSystemAbort(FileSystemSink *this, Error *errorO)
     abort(); /* TODO: not implemented. */
 }
 
-void fileSystemSeek(FileSystemSink *this, size_t position, Error *error)
+pos_t fileSystemSeek(FileSystemSink *this, pos_t position, Error *error)
 {
-    sys_lseek(this->fd, position, error);
+    return sys_lseek(this->fd, position, error);
 }
 
 
@@ -142,7 +141,7 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnRead = (FilterRead)fileSystemRead,
     .fnClose = (FilterClose)fileSystemClose,
     .fnSync = (FilterSync)fileSystemSync,
-    .fnSize = (FilterSize)fileSystemSize,
+    .fnBlockSize = (FilterBlockSize)fileSystemBlockSize,
     .fnAbort = (FilterAbort)fileSystemAbort,
     .fnSeek = (FilterSeek)fileSystemSeek
 };

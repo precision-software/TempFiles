@@ -1,6 +1,7 @@
 /*
  *
  */
+#include <assert.h>
 #include "common/filter.h"
 #include "common/passThrough.h"
 
@@ -24,11 +25,11 @@ Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
     this->nextClose = getNext(Close, this);
     this->nextSync = getNext(Sync, this);
     this->nextAbort = getNext(Abort, this);
-    this->nextSize = getNext(Size, this);
+    this->nextBlockSize = getNext(BlockSize, this);
     this->nextSeek = getNext(Seek, this);
 
     /* Each filter must provide a "Size" routine in its interface. */
-    assert(this->iface->fnSize != NULL);
+    assert(this->iface->fnBlockSize != NULL);
 
     return this;
 }
