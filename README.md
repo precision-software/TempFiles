@@ -113,13 +113,17 @@ flowchart LR
 ```
 
 TODO:
-- checksum/digest
+- Seek tests on encrypted files.
+- compression on streamed files.
+- Read seeks on compressed files with record index.
+- Update vocabulary (records, not blocks)
 - bring code in line with Postgres standards
 - non-static error messages
-- enforce readable/writeable in read/write
-- O_DIRECT and async I/O?
-- add isReadable, isWriteable, isOpen to header, so passThroughXXX can do some simple error handling (instead of each filter)
-  Stream API
+- enforce readable/writeable in read/write.
+- test O_APPEND
+- BufFile integration (or equivalent);
+- Multiple Opens? (Needed for random seeks in distributed files)
+- End of File : verify encrypted file actually ends.
 
 ### Proposed Vocabulary (Not reflected in code yet)
 ***Block*** - A cipher block, 16 bytes for AES.

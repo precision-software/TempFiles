@@ -28,7 +28,7 @@ size_t aead_encrypt(AeadFilter *this, Byte *plainText, size_t plainSize, Byte *h
                   size_t headerSize, Byte *cipherText, size_t cipherSize,Byte *tag, Error *error);
 size_t aead_decrypt(AeadFilter *this, Byte *plainText, size_t plainSize, Byte *header,
                   size_t headerSize, Byte *cipherText, size_t cipherSize, Byte *tag, Error *error);
-void aeadCipherSetup(AeadFilter *this, char *cipherName, Error *error);
+bool aeadCipherSetup(AeadFilter *this, char *cipherName, Error *error);
 
 /**
  * Converter structure for encrypting and decrypting TLS Records.
@@ -77,21 +77,144 @@ Error aeadFilterOpen(AeadFilter *this, char *path, int mode, int perm)
     /* Go ahead and open the downstream file. */
     Error error = passThroughOpen(this, path, mode, perm);
 
-    /* Position at the beginning */
-    passThroughSeek(this, 0, &error);
+    /* Note we are positioned at the beginning */
     this->blockNr = 0;
 
-    /* Read configuration from the file header */
-    /* Later - for now just set the parameters. */
-    memcpy(this->iv, "1234567890123456", 16);
-    this->plainBlockSize = 1024;
-    this->headerSize = 0;
-
-    /* Configure the cipher parameters. */
-    aeadCipherSetup(this, "AES_256_CBC", &error);
+    /* Configure, we will be positioned at end of header. */
+    aeadConfigure(this, error);
 
     return error;
 }
+
+void aeadConfigure(AeadFilter *this, Error *error)
+{
+    /* If we are creating a new file, write out a header */
+
+}
+
+void aeadHeaderRead(AeadFilter *this, Error *error)
+{
+    if (isError(*error))
+        return;
+
+    /* Read the header */
+    Byte header[MAX_AEAD_HEADER_SIZE];
+    size_t headerSize = passThroughReadSized(this, header, sizeof(header), &error);
+
+    /* Extract the various fields from the header, ensuring safe memory references */
+    Byte *bp = header;
+    Byte *end = header + headerSize;
+
+    size_t length = unpack4(&bp, end);
+    if (length != headerSize)
+        return (void) filterError(error, "Header size doesn't match");
+
+    this->blockSize = unpack4(&bp, end);
+    if (this->plainBlockSize > AEAD_MAX_RECORD_SIZE)
+        return (void) filterError(error, "AEAD record size in header is too large");
+
+    /* Get the cipher name */
+    size_t nameSize = unpack1(&bp, end);
+    if (nameSize > sizeof(this->cipherName) - 1)  /* allow for null termination */
+        return (void) filterError(error, "Cipher name in header is too large");
+    unpackBytes(&bp, end, this->cipherName, nameSize);
+    this->cipherName[nameSize] = '\0';
+
+    /* Get the initialization vector */
+    this->ivSize = unpack1(&bp, end);
+    if (this->ivSize > sizeof(this->iv))
+        return (void) filterError(error, "Initialization vector is too large");
+    unpackBytes(&bp, end, this->iv, this->ivSize);
+
+    /* Get the empty cipher text block */
+    Byte emptyBlock[EVP_MAX_BLOCK_LENGTH];
+    size_t emptySize = unpack1(&bp, end);
+    if (emptySize > sizeof(emptyBlock))
+        return (void) filterError(error, "Empty cipher block in header is too large");
+    unpackBytes(&bp, end, emptyBlock, emptySize);
+
+    /* Get the MAC tag */
+    Byte tag[EVP_MAX_MD_SIZE];
+    this->tagSize = unpack1(&bp, end);
+    if (this->tagSize > sizeof(tag))
+        return (void) filterError(error, "Authentication tag is too large");
+    unpackBytes(&bp, end, tag, this->tagSize);
+
+    /* Verify we haven't overflowed. Ideally, we should have bp == end */
+    if (bp > end)
+        return (void) filterError(error, "Invalid AEAD header in file");
+
+    /* Lookup the cipher and its parameters. */
+    if (aeadCipherSetup(this, this->cipherName, error))
+        return;
+
+    /* Validate the header. The tag and empty block are separate, so don't include them. */
+    Byte plainEmpty[0];
+    headerSize = headerSize - this->tagSize - 1 - emptySize - 1;
+    size_t plainSize = aead_decrypt(this, plainEmpty, sizeof(plainEmpty), header, headerSize, emptyBlock, emptySize, tag, error);
+
+    /* set the plaintext block size */
+    this->plainBlockSize = this->blockSize - this->padding - this->tagSize;
+}
+
+
+void AeadHeaderWrite(AeadFilter *this, Error *error)
+{
+    /* Configure the cipher parameters. */
+    if (aeadCipherSetup(this, this->cipherName, error))
+        return;
+
+    Byte header[MAX_AEAD_HEADER_SIZE];
+    Byte *bp = header;
+    Byte *end = header + sizeof(header);
+
+    /* Skip the header size until last */
+    pack4(&bp, end, 0);
+
+    /* File encrypted record size */
+    pack4(&bp, end, this->blockSize);
+
+    /* Cipher name */
+    pack1(bp, end, strlen(this->cipherName));
+    packBytes(bp, end, this->cipherName, strlen(this->cipherName));
+
+    /* Initialization vector */
+    pack1(bp, end, this->ivSize);
+    packBytes(bp, end, this->iv);
+
+    /* Verify we haven't overflowed our buffer. */
+    if (bp > end)
+        return (void)filterError(error, "Trying to write a header which is too large");
+
+    /* Go back and fill in the total header size */
+    Byte *begin = header;
+    size_t headerSize = bp-header + 1 + aeadPadding(this, 0) + 1 + this->tagSize;
+    pack4(&begin, end, headerSize);
+
+    /* Encrypt an empty block and authenticate the header. */
+    Byte emptyBlock[EVP_MAX_BLOCK_LENGTH];
+    Byte tag[EVP_MAX_MD_SIZE];
+    size_t emptySize = aead_encrypt(this, NULL, 0, header, end-header, emptyBlock, sizeof(emptyBlock), tag, error);
+    if (emptySize != aeadPadding(this, 0))
+        return (void)filterError(error, "Size of empty block padding was miscalculated");
+
+    /* Add the empty block and tag to the header */
+    pack1(bp, end, emptySize);
+    packBytes(bp, end, emptyBlock, emptySize);
+    pack1(bp, end, this->tagSize);
+    packBytes(bp, end, tag);
+
+    /* Verify we haven't overflowed the header */
+    if (bp > end)
+        return (void)filterError(error, "Aead header was too large to write");
+
+    /* Write the header to the output file */
+    passThroughWriteAll(this, header, bp-header, error);
+
+    /* That was block 0. Now we are on the next block. */
+    this->blockNr++;
+}
+
 
 /**
  * Read a block of encrypted data into our internal buffer, placing plaintext into the caller's buffer.
