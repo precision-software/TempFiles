@@ -125,6 +125,7 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
+
     beginTest(fileName);
     generateFile(pipe, fileName, fileSize, bufferSize);
 

@@ -27,5 +27,7 @@ extern FilterInterface passThroughInterface;
 /* Helper function to ensure all the data is written. */
 size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error);
 size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
+size_t passThroughReadSized(void *this, Byte *header, size_t size, Error *error);
+size_t passThroughWriteSized(void *this, Byte *header, size_t size, Error *error);
 
 #endif /*UNTITLED1_PASSTHROUGH_H */

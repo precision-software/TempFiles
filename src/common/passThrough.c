@@ -4,7 +4,8 @@
  */
 #include "error.h"
 #include "assert.h"
-#include "passThrough.h"
+#include "common/passThrough.h"
+#include "common/packed.h"
 
 static Error notInSink =
         (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
@@ -65,6 +66,44 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 
     return totalSize;
 }
+
+
+/*
+ * Read a variable size record.
+ *   TODO: 1) size should not be part of the data, 2) Also implemented as a filter, 2) include size separately in AEAD validation.
+ */
+size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
+{
+    /* Read the record length  */
+    size_t actual = passThroughReadAll(this, record, 4, error);
+    if (isError(*error))
+        return 0;
+
+    /* Unpack it and do a sanity check */
+    Byte *bp = record;
+    size_t recordSize = unpack4(&bp, record+size);
+    if (recordSize > size)
+        return filterError(error, "Record length is too large");
+
+    /* Read the rest of the record */
+    actual = passThroughReadAll(this, record, recordSize, error);
+
+    /* Done. actual will match recordSize, unless there was an error. */
+    return actual;
+}
+
+size_t passThroughWriteSized(void *this, Byte *record, size_t size, Error *error)
+{
+    /* Write out the 32-bit size in network byte order (big endian) */
+    Byte sizeBuf[4];
+    Byte *bp = sizeBuf;
+    pack4(&bp, bp+4, size);
+    passThroughWriteAll(this, sizeBuf, 4, error);
+
+    /* Write out the record */
+    return passThroughWriteAll(this, record, size, error);
+}
+
 
 /**
  * A Dummy size function, just as a placeholder.

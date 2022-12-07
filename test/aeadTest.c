@@ -17,10 +17,10 @@ void testMain()
     beginTestGroup("AES Encrypted Files");
     FileSource *stream =
         fileSourceNew(
-            blockifyNew(1027,
-                aeadFilterNew("AES-256-GMC", 1027, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
+            blockifyNew(4*1024,
+                aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                     fileSystemSinkNew(0))));
 
-    singleStreamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 1027, 1024);
+    //singleStreamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 1027, 1024);
     streamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat");
 }

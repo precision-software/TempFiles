@@ -44,6 +44,8 @@
 typedef uint64_t pos_t;
 #define FILE_END_POSITION ((pos_t)-1)
 
+#define MAX_RECORD_SIZE (16*1024*1024)
+
 /* This structure is an abstract header which is the first element of all filter types. */
 typedef struct Filter {
     struct Filter *next;            /* Points to the next filter in the pipeline */
