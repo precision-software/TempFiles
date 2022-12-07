@@ -16,6 +16,8 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 
+#include "common/debug.h"
+
 #include "encrypt/libcrypto/aead.h"
 #include "common/filter.h"
 #include "common/passThrough.h"
@@ -355,6 +357,9 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
 
     /* set the ciphertext block size */
     this->blockSize = this->plainBlockSize + paddingSize(this, this->blockSize) + this->tagSize;
+
+    /* We have just read one record */
+    this->blockNr++;
 }
 
 
@@ -471,12 +476,15 @@ aead_encrypt(AeadFilter *this,
              Byte *cipherText, size_t cipherSize,
              Byte *tag, Error *error)
 {
+
+    debug("Encrypt: plainText=%.64s plainSize=%zu\n", plainText, plainSize);
     /* Reinitialize the encryption context to start a new record */
     EVP_CIPHER_CTX_reset(this->ctx);
 
     /* Generate nonce by XOR'ing the initialization vector with the sequence number */
     Byte nonce[EVP_MAX_IV_LENGTH];
     generateNonce(nonce, this->iv, this->ivSize, this->blockNr);
+    debug("Encrypt: iv=%s  blockNr=%zu  nonce=%s\n", asHex(this->iv, this->ivSize), this->blockNr, asHex(nonce, this->ivSize));
 
     /* Configure the cipher with the key and nonce */
     if (!EVP_CipherInit_ex2(this->ctx, this->cipher, this->key, nonce, 1, NULL))
@@ -508,6 +516,7 @@ aead_encrypt(AeadFilter *this,
     if (!EVP_CIPHER_CTX_ctrl(this->ctx, EVP_CTRL_AEAD_GET_TAG, (int)this->tagSize, tag))
         return openSSLError(error);
 
+    debug("Encrypt: cipherText=%.128s  cipherSize=%d\n", asHex(cipherText, cipherUpdateSize + cipherFinalSize), cipherUpdateSize+cipherFinalSize);
     /* Output size combines both the encyption (update) and the finalization. */
     return cipherUpdateSize + cipherFinalSize;
 }
@@ -538,6 +547,7 @@ aead_decrypt(AeadFilter *this,
     /* Generate nonce by XOR'ing the initialization vector with the sequence number */
     Byte nonce[EVP_MAX_IV_LENGTH];
     generateNonce(nonce, this->iv, this->ivSize, this->blockNr);
+    debug("Decrypt: iv=%s  blockNr=%zu  nonce=%s\n", asHex(this->iv, this->ivSize), this->blockNr, asHex(nonce, this->ivSize));
 
     /* Configure the cipher with key and initialization vector */
     if (!EVP_CipherInit_ex2(this->ctx, this->cipher, this->key, nonce, 0, NULL))
@@ -570,6 +580,7 @@ aead_decrypt(AeadFilter *this,
         return openSSLError(error);
 
     /* Output plaintext size combines the update part of the encryption and the finalization. */
+    debug("Decrypt: plainText=%.64s plainSize=%d\n", plainText, plainUpdateSize+plainFinalSize);
     return plainUpdateSize + plainFinalSize;
 }
 
