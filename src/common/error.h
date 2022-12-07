@@ -22,9 +22,6 @@ As a quick prototype, errors contain static strings.
 /* This file is included everywhere, so define Byte here for now. */
 typedef unsigned char Byte;
 
-#define debug printf
-/*#define debug (void) */
-
 /* An error type which can be tested for OK or not */
 typedef struct Error {
     int code;                  /* negative is system, positive is enum.  zero is OK. */

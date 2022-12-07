@@ -56,3 +56,14 @@ add_executable(aeadTest test/aeadTest.c
         src/common/syscall.c src/common/syscall.h
         src/file/buffered.c src/file/buffered.h)
 target_link_libraries(aeadTest crypto)
+
+add_executable(aeadSeekTest test/aeadSeekTest.c
+        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
+        test/framework/unitTestInternal.h test/framework/seekFramework.c test/framework/seekFramework.h test/framework/unitTest.h
+        src/common/filter.c src/common/filter.h
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h
+        src/file/buffered.c src/file/buffered.h)
+target_link_libraries(aeadSeekTest crypto)

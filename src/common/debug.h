@@ -7,7 +7,7 @@
 #include "common/filter.h"
 
 //#define debug printf
-#define debug if (1) ; else
+#define debug if (1) ; else (void)
 
 static inline char *asHex(Byte *buf, size_t size)
 {

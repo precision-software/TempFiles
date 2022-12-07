@@ -168,11 +168,12 @@ void aeadFilterClose(AeadFilter *this, Error *error)
 
     /* Get the size of our downstream file. TODO: only when writing! */
     size_t fileSize = passThroughSeek(this, FILE_END_POSITION, error);
+    size_t dataSize = fileSize - this->headerSize;
 
-    /* If downstream file consists of full size blocks, add a zero length partial block */
-    if (fileSize % this->blockSize == 0)
+    /* If downstream file consists of a header and full size blocks, add a zero length partial block */
+    if (dataSize % this->blockSize == 0)
     {
-        this->blockNr = fileSize / this->blockSize;
+        this->blockNr = dataSize / this->blockSize + 1;  /* Header is 0, data records are 1..n */
         aeadFilterWrite(this, this->buf, 0, error);
     }
 
@@ -213,8 +214,8 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
         return filterError(error, "Must seek to a block boundary");
 
     /* Set the new block number and go there in the downstream file. */
-    this->blockNr = plainPosition / this->plainBlockSize;
-    pos_t cipherPosition = this->headerSize + this->blockNr * this->blockSize;
+    this->blockNr = plainPosition / this->plainBlockSize + 1;
+    pos_t cipherPosition = this->headerSize + (this->blockNr-1) * this->blockSize;
     passThroughSeek(this, cipherPosition, error);
 
     /* Return the new plainPosition, adding in offset if requesting file size. */
@@ -302,7 +303,7 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
         return;
 
     /* Read the header */
-    Byte header[MAX_AEAD_HEADER_SIZE];
+    Byte header[MAX_AEAD_HEADER_SIZE] = {'Z'};
     size_t headerSize = passThroughReadSized(this, header, sizeof(header), error);
 
     /* Extract the various fields from the header, ensuring safe memory references */
@@ -352,14 +353,17 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
 
     /* Validate the header. The tag and empty block are separate, so don't include them. */
     Byte plainEmpty[0];
-    headerSize = headerSize - this->tagSize - 1 - emptySize - 1;
-    size_t plainSize = aead_decrypt(this, plainEmpty, sizeof(plainEmpty), header, headerSize, emptyBlock, emptySize, tag, error);
+    size_t validateSize = this->headerSize - this->tagSize - 1 - emptySize - 1;
+    size_t plainSize = aead_decrypt(this, plainEmpty, sizeof(plainEmpty), header, validateSize, emptyBlock, emptySize, tag, error);
 
     /* set the ciphertext block size */
     this->blockSize = this->plainBlockSize + paddingSize(this, this->blockSize) + this->tagSize;
 
     /* We have just read one record */
     this->blockNr++;
+
+    /* Remember the header size. Since it was a "sized" write, add 4 bytes for the record size. */
+    this->headerSize = headerSize + 4;
 }
 
 
@@ -410,7 +414,10 @@ void aeadHeaderWrite(AeadFilter *this, Error *error)
         return (void)filterError(error, "Encryption file header was too large.");
 
     /* Write the header to the output file */
-    passThroughWriteSized(this, header, bp-header, error);
+    passThroughWriteSized(this, header, bp - header, error);
+
+    /* Remember the header size. Since we did a "sized" write, add 4 bytes for the record size. */
+    this->headerSize = bp - header + 4;
 
     /* That was block 0. Now we are on the next block. */
     this->blockNr++;
@@ -541,6 +548,7 @@ aead_decrypt(AeadFilter *this,
              Byte *cipherText, size_t cipherSize,
              Byte *tag, Error *error)
 {
+    debug("Decrypt: cipherText=%.128s  cipherSize=%zu\n", asHex(cipherText, cipherSize), cipherSize);
     /* Reinitialize the encryption context to start a new record */
     EVP_CIPHER_CTX_reset(this->ctx);
 

@@ -71,6 +71,7 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     Error error = fileOpen(pipe, path, O_RDONLY, 0);
+    PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
 
     for (size_t actual, position = 0; position < fileSize; position += actual)

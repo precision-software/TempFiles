@@ -3,7 +3,8 @@
  */
 #include <unistd.h>
 #include <sys/fcntl.h>
-#include "syscall.h"
+#include "common/syscall.h"
+#include "common/debug.h"
 
 
 /**
@@ -12,6 +13,7 @@
  */
 size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
 {
+    debug("sys_read: size=%zu\n", size);
     if (isError(*error))
         return 0;
 
@@ -36,6 +38,7 @@ size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
  */
 size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
 {
+    debug("sys_write: size=%zu\n", size);
     if (isError(*error))
         return 0;
 
@@ -57,6 +60,7 @@ size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
  */
 int sys_open(char *path, int oflag, int perm, Error *error)
 {
+    debug("sys_open: path=%s\n", path);
     if (isError(*error)) return -1;
 
     int fd = open(path, oflag, perm);
@@ -97,6 +101,7 @@ void sys_datasync(int fd, Error *error)
  */
 pos_t sys_lseek(int fd, pos_t position, Error *error)
 {
+    debug("sys_lseek: position=%lld\n", (off_t)position);
     if (isError(*error))
         return (pos_t)-1;
 
