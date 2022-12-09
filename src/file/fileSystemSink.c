@@ -29,11 +29,11 @@ static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered
 /**
  * Open a Posix file.
  */
-Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
+Error fileSystemOpen(FileSystemSink *this, char *path, int oflags, int perm)
 {
-    /* Check the mode we are opening the file in. TODO: move checks to fileSource. */
-    this->writable = (mode & O_ACCMODE) != O_RDONLY;
-    this->readable = (mode & O_ACCMODE) != O_WRONLY;
+    /* Check the oflags we are opening the file in. TODO: move checks to fileSource. */
+    this->writable = (oflags & O_ACCMODE) != O_RDONLY;
+    this->readable = (oflags & O_ACCMODE) != O_WRONLY;
     this->eof = false;
 
     /* Default file permission when creating a file. */
@@ -42,7 +42,7 @@ Error fileSystemOpen(FileSystemSink *this, char *path, int mode, int perm)
 
     /* Open the file and check for errors. */
     Error error = errorOK;
-    this->fd = sys_open(path, mode, perm, &error);
+    this->fd = sys_open(path, oflags, perm, &error);
 
     return error;
 }

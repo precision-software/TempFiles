@@ -98,6 +98,8 @@ void badSeek(Filter *this, size_t position, Error *error);
 
 inline static size_t sizeMin(size_t a, size_t b) {return (a<b)?a:b;}
 inline static size_t sizeMax(size_t a, size_t b) {return (a>b)?a:b;}
-inline static size_t sizeRoundUp(size_t size, size_t factor) {return (size + factor - 1) / factor * factor;}
+inline static size_t sizeRoundDown(size_t size, size_t factor) {return size - size % factor;}
+inline static size_t sizeRoundUp(size_t size, size_t factor) {return sizeRoundDown(size + factor - 1, factor);}
+
 
 #endif /*UNTITLED1_FILTER_H */

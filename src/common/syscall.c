@@ -13,7 +13,6 @@
  */
 size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
 {
-    debug("sys_read: size=%zu\n", size);
     if (isError(*error))
         return 0;
 
@@ -28,6 +27,7 @@ size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
         retVal = 0;
     }
 
+    debug("sys_read: size=%zu actual=%zd\n", size, retVal);
     return (size_t) retVal;
 }
 
@@ -101,7 +101,6 @@ void sys_datasync(int fd, Error *error)
  */
 pos_t sys_lseek(int fd, pos_t position, Error *error)
 {
-    debug("sys_lseek: position=%lld\n", (off_t)position);
     if (isError(*error))
         return (pos_t)-1;
 
@@ -119,5 +118,6 @@ pos_t sys_lseek(int fd, pos_t position, Error *error)
     if (ret == -1)
         *error = systemError();
 
+    debug("sys_lseek: position=%lld  ret=%lld\n", (off_t)position, ret);
     return (pos_t)ret;
 }

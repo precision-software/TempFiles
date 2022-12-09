@@ -484,7 +484,7 @@ aead_encrypt(AeadFilter *this,
              Byte *tag, Error *error)
 {
 
-    debug("Encrypt: plainText=%.64s plainSize=%zu\n", plainText, plainSize);
+    debug("Encrypt: plainText='%.*s' plainSize=%d\n", (int)sizeMin(plainSize,64), plainText, plainSize);
     /* Reinitialize the encryption context to start a new record */
     EVP_CIPHER_CTX_reset(this->ctx);
 
@@ -588,8 +588,9 @@ aead_decrypt(AeadFilter *this,
         return openSSLError(error);
 
     /* Output plaintext size combines the update part of the encryption and the finalization. */
-    debug("Decrypt: plainText=%.64s plainSize=%d\n", plainText, plainUpdateSize+plainFinalSize);
-    return plainUpdateSize + plainFinalSize;
+    size_t plainActual = plainUpdateSize + plainFinalSize;
+    debug("Decrypt: plainText='%.*s' plainActual=%d\n", (int)sizeMin(plainActual,64), plainText, plainActual);
+    return plainActual;
 }
 
 

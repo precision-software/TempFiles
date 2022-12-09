@@ -14,10 +14,10 @@
  *    1) All I/Os to actual file are block aligned.  ("actual file" means next stage in pipeline.)
  *    2) All I/Os transfer an entire block, except for the final block in the file.
  *    3) The actual file is pre-positioned for the next I/O.
- *       a) If the buffer is empty or dirty, the actual file position matches blockPosition.
- *       b) If the buffer has clean data, the actual file position matches blockPosition+blockSize.
- *    Purely sequential reads/writes do not require Seek operations.
- *    If dirty, our internal buffer is not empty.
+ *       a) If the buffer is partial or dirty, the actual file position matches blockPosition.
+ *       b) If the buffer is full of clean data, the actual file position matches blockPosition+blockSize.
+ *
+ *  One goal is to ensure purely sequential reads/writes do not require Seek operations.
  *
  * TODO: Open should return a new instance each time, so we can open multiple files at once.
  */
@@ -27,8 +27,9 @@
 #include <assert.h>
 #include "common/error.h"
 #include "common/passThrough.h"
+#include "common/debug.h"
 
-#include "buffered.h"
+#include "file/buffered.h"
 
 #define palloc malloc
 
@@ -38,6 +39,7 @@
 struct Blockify
 {
     Filter filter;        /* Common to all filters */
+    size_t suggestedSize; /* The suggested buffer size. We may make it a bit bigger */
 
     size_t blockSize;     /* The size of blocks we read/write to our successor. */
     Byte *buf;            /* Local buffer, precisely one block in size. */
@@ -56,20 +58,22 @@ struct Blockify
 
 
 /* Forward references */
-void writeBlock(Blockify *this, size_t position, Error *error);
-void readBlock(Blockify *this, size_t position, Error *error);
-void flushCurrentBlock(Blockify *this, Error *error);
-void fillCurrentBlock(Blockify *this, Error *error);
 size_t blockifySeek(Blockify *this, size_t position, Error *error);
+static size_t copyOut(Blockify *this, Byte *buf, size_t size);
+static size_t copyIn(Blockify *this, Byte *buf, size_t size);
+static bool flushBuffer(Blockify *this, Error *error);
+static bool fillBuffer(Blockify *this, Error *error);
+size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error);
+size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
 
 /**
  * Open a buffered file, reading, writing or both.
  */
-Error blockifyOpen(Blockify *this, char *path, int mode, int perm)
+Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
 {
     /* Are we read/writing or both? */
-    this->readable = (mode & O_ACCMODE) != O_WRONLY;
-    this->writeable = (mode & O_ACCMODE) != O_RDONLY;
+    this->readable = (oflags & O_ACCMODE) != O_WRONLY;
+    this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
 
     /* Position to the start of file */
     this->position = 0;
@@ -81,96 +85,12 @@ Error blockifyOpen(Blockify *this, char *path, int mode, int perm)
 
     /* We don't know the size of the file yet. */
     this->fileSize = 0;
-    this->sizeConfirmed = (mode & O_TRUNC) == O_TRUNC;
+    this->sizeConfirmed = (oflags & O_TRUNC) == O_TRUNC;
 
     /* Pass the open event to the next filter to actually open the file. */
-    Error error = passThroughOpen(this, path, mode, perm);
+    Error error = passThroughOpen(this, path, oflags, perm);
 
     return error;
-}
-
-
-/*
- * A debug function to verify the various buffer pointers are consistent with each other.
- */
-static void checkBuffer(Blockify(*this))
-{
-    assert(this->fileSize >= this->blockPosition + this->blockActual);
-    assert(this->blockPosition <= this->position);
-    assert(this->position <= this->fileSize);
-    assert(this->blockPosition + this->blockActual >= this->position || this->blockActual == 0);
-    size_t offset = this->position % this->blockSize;
-    assert(this->blockPosition+offset == this->position || this->blockPosition+this->blockSize == this->position);
-    assert(this->blockActual <= this->blockSize);
-}
-
-
-
-static bool flushBuffer(Blockify *this, Error *error)
-{
-    /* Check for holes. */
-    if (this->position > this->fileSize)
-        return filterError(error, "Positioned beyond End-Of-File - holes not allowed.");
-
-    /* if the block is dirty, flush it. */
-    if (this->dirty && this->blockActual > 0)
-        passThroughWriteAll(this, this->buf, this->blockActual, error);
-    this->dirty = false;
-
-    return isError(*error);
-}
-
-/*
- * Advance to the next buffer if we are at the end of the current buffer.
- */
-static bool nextBuffer(Blockify *this, Error *error)
-{
-    /* If we are positioned at the end of the current buffer, ... */
-    if (this->blockActual > 0 && this->position >= this->blockPosition + this->blockSize)
-    {
-        /* Write out the current buffer if dirty */
-        if (flushBuffer(this, error))
-            return true;
-
-        /* Position to the beginning of the next buffer */
-        this->blockPosition += this->blockSize;
-        this->blockActual = 0;
-
-        if (this->blockPosition > this->fileSize)
-            this->fileSize = this->position;
-    }
-
-    return isError(*error);
-}
-
-
-static bool fillBuffer (Blockify *this, Error *error)
-{
-    if (this->blockActual == 0)
-    {
-        this->blockActual = passThroughRead(this, this->buf, this->blockSize, error);
-        this->sizeConfirmed |= this->blockActual < this->blockSize;
-        if (this->blockPosition + this->blockActual > this->fileSize)
-            this->fileSize = this->blockPosition + this->blockActual;
-    }
-
-    return isError(*error);
-}
-
-static size_t copyIn(Blockify *this, Byte *buf, size_t size)
-{
-    size_t offset = this->position - this->blockPosition;
-    size_t actual = sizeMin(this->blockSize-offset, size);
-    memcpy(this->buf + offset, buf, actual);
-    return actual;
-}
-
-static size_t copyOut(Blockify *this, Byte *buf, size_t size)
-{
-    size_t offset = this->position - this->blockPosition;
-    size_t actual = sizeMin(this->blockActual-offset, size);
-    memcpy(buf, this->buf + offset, actual);
-    return actual;
 }
 
 
@@ -179,57 +99,62 @@ static size_t copyOut(Blockify *this, Byte *buf, size_t size)
  */
 size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 {
+    debug("blockifyWrite: size=%zu  position=%zu \n", size, this->position);
+    assert(size > 0);
     if (isError(*error))
         return 0;
 
-    /* Advance to next buffer if appropriate. */
-    nextBuffer(this, error);
-
-    /* If our buffer is empty and the request is aligned and big enough, ... */
-    if (this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
+    /* If we are at end of current buffer. */
+    if (this->position == this->blockPosition + this->blockSize)
     {
-        /* Bypass our buffer and write a block directly to the next stage */
-        size_t actual = passThroughWriteAll(this, buf, this->blockSize, error);
-        if (isError(*error))
-            return 0;
+        /* Clean the buffer if dirty */
+        flushBuffer(this, error);
 
-        /* Update our position to reflect the write */
-        this->position += actual;
-        this->blockPosition += actual;
-
-        if (this->position > this->fileSize)
-            this->fileSize = this->position;
-        return actual;
+        /* Move to the next block (with empty buffer) */
+        this->blockPosition += this->blockSize;
+        this->blockActual = 0;
     }
 
-    /* If we are both read+writing, read before modifying. */
-    /*   Note we are moving from assertion 3a to assertion 3b. */
-    if (this->readable) // TODO: use known file size as well.
+    /* If buffer is empty, position is aligned, and the data exceeds block size, write direct to next stage */
+    if (this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
+        return directWrite(this, buf, size, error);
+
+    /* If buffer is empty ... */
+    if (this->blockActual == 0 && this->readable)
+    {
+        /* Fill the buffer, ignoring EOF */
         fillBuffer(this, error);
+        if (errorIsEOF(*error))
+            *error = errorOK;
+    }
 
-    /* if we are about to dirty a clean buffer, then seek back to beginning of buffer */
-    /*  Note we are moving from assertion 3b to assertion 3a. */
-    if (this->blockActual > 0 && !this->dirty)
+    /* If we are dirtying a clean buffer, then seek backwards to the start of buffer */
+    if (!this->dirty)
+    {
         passThroughSeek(this, this->blockPosition, error);
-    this->dirty = true;
+        this->dirty = true;
+    }
 
-    /* Copy data into the buffer */
+    /* Copy data in and update position */
     size_t actual = copyIn(this, buf, size);
     this->position += actual;
 
-    /* We may have extended valid data at the end of block. */
-    size_t offset = this->position - this->blockPosition;
-    if (offset > this->blockActual)
-        this->blockActual = offset;
-
-    /* Update our knowledge about the size of the file. */
-    if (this->blockPosition + this->blockActual > this->fileSize)
-        this->fileSize = this->blockPosition + this->blockActual;
-
-    /* done */
+    assert(actual > 0);
     return actual;
 }
 
+size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
+{
+    /* Write out multiple records, but no partials */
+    size_t alignedSize = sizeRoundDown(size, this->blockSize);
+    size_t actual = passThroughWriteAll(this, buf, alignedSize, error);
+
+    /* Update positions */
+    this->position += actual;
+    this->blockPosition = sizeRoundDown(this->position, this->blockSize);
+
+    return actual;
+}
 
 /**
  * Read bytes from the buffered stream.
@@ -237,65 +162,60 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
  */
 size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
+    debug("blockifyRead: position=%zu size=%zu\n", this->position, size);
     if (!errorIsOK(*error))
         return 0;
 
-    /* Advance to next buffer if appropriate. */
-    nextBuffer(this, error);
-    if (isError(*error))
+    /* If we are at the end of the current (non-empty) buffer */
+    if (this->position == this->blockPosition + this->blockActual && this->blockActual > 0)
+    {
+        /* If the buffer is partial, then we are EOF */
+        if (this->blockActual < this->blockSize)
+            return setError(error, errorEOF);
+
+        /* Clean the buffer if dirty */
+        flushBuffer(this, error);
+
+        /* Advance to the next buffer position, with an empty buffer */
+        this->blockPosition += this->blockSize;
+        this->blockActual = 0;
+    }
+
+    /* Optimization. See if we skip our buffer and talk directly to the next stage */
+    if (this->position == this->blockPosition && size > this->blockSize && this->blockActual == 0)
+        return directRead(this, buf, size, error);
+
+        /* If our buffer is empty fill it in.  Exit on error or EOF */
+    if (this->blockActual == 0 && fillBuffer(this, error))
         return 0;
-
-    /* If our buffer is empty and the request is big enough and aligned, ... */
-    if (this->blockActual == 0 && size >= this->blockSize && this->position == this->blockPosition)
-    {
-        /* Bypass our buffer and read a block directly from the next stage */
-        size_t actual = passThroughRead(this, buf, this->blockSize, error);
-        if (isError(*error))
-            return 0;
-
-        /* Update our position to reflect the read. TODO: what about partial read? */
-        if (actual == this->blockSize)
-            this->blockPosition += this->blockSize;
-        this->position += actual;
-
-        /* Track the file size as well as we can. */
-        this->sizeConfirmed |= actual < this->blockSize;
-        if (this->position > this->fileSize)
-            this->fileSize = this->position;
-
-        return actual;
-    }
-
-    /* Read in the current buffer if not already done. */
-    if (this->blockActual == 0)
-    {
-        fillBuffer(this, error);
-        if (isError(*error))
-            return 0;
-    }
-
-    /* If we are still positioned at end of buffer, then EOF.  (explain?) */
-    if (this->position == this->blockPosition + this->blockActual)
-        return setError(error, errorEOF);
-
-    /* If we are positioned beyond end of buffer, then HOLE. (explain?) */
-    if (this->position > this->blockPosition + this->blockActual)
-        return filterError(error, "Attempting to read past End-Of-File.");
 
     /* Copy bytes out from our internal buffer. */
     size_t actual = copyOut(this, buf, size);
     this->position += actual;
 
-    /* If we reached end of block, then prepare to read the next block */
-    assert(this->position <= this->blockPosition + this->blockSize);
-    if (this->position == this->blockPosition + this->blockSize)
-    {
-        this->blockPosition = this->position;
-        this->blockActual = 0;
-    }
-
     /* Return the number of bytes transferred. */
     return actual;
+}
+size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
+{
+    debug("directRead: size=%zu  position=%zu\n", size, this->position);
+    /* Read multiple records, but no partials */
+    size_t alignedSize = sizeRoundDown(size, this->blockSize);
+    size_t actual = passThroughReadAll(this, buf, alignedSize, error);
+
+    /* If we read a partial block, claw it back from the caller's buffer */
+    size_t actualPartial = actual % this->blockSize;
+    size_t actualBlock = actual - actualPartial;
+    if (actualPartial > 0)
+        copyIn(this, buf+actualBlock, actualPartial);
+
+    /* Update positions */
+    this->position += actualBlock;
+    this->blockPosition += actualBlock;
+    if (actualPartial > 0)
+        this->fileSize = this->position + actual;
+
+    return actualBlock;
 }
 
 
@@ -304,33 +224,42 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
  */
 size_t blockifySeek(Blockify *this, size_t position, Error *error)
 {
+    debug("blockifySeek: this->position=%zu  position=%zd\n", this->position, (off_t)position);
     if (isError(*error))
         return this->position;
 
+    /* If seeking to end, ... */
+    if (position == FILE_END_POSITION)
+    {
+        /* Clean our buffer if needed. TODO: KLUDGE get file size without losing the dirty data */
+        flushBuffer(this, error);
+        this->blockPosition = FILE_END_POSITION;  /* An invalid position so we will always seek */
+
+        /* Get the actual file size which will be our new position */
+        this->fileSize = passThroughSeek(this, FILE_END_POSITION, error);
+
+        /* Our desired position is at the end of file */
+        position = this->fileSize;
+    }
+
     /* If we are moving to a different block ... */
-    size_t newBlock = position - position % this->blockSize;
+    size_t newBlock = sizeRoundDown(position, this->blockSize);
+    debug("blockifySeek: position=%zu  newBlock=%zu\n", position, newBlock);
     if (newBlock != this->blockPosition)
     {
         /* If dirty, flush current block. */
         flushBuffer(this, error);
 
         /* Position to new block in file. */
-        size_t actualPosition = passThroughSeek(this, newBlock, error);
+        passThroughSeek(this, newBlock, error);
         this->blockPosition = newBlock;
         this->blockActual = 0;
     }
 
-    /* Check for positioning beyond end of file */
-    /* TODO: */
-
-    /* At this point, we are pointing to the desired block. Update position */
+    /* Update position */
     this->position = position;
 
-    /* Check for seek beyond filesize */
-    if (this->position > this->fileSize)
-        this->fileSize = this->position; // TODO: What about holes?
-
-    return this->position;
+    return position;
 }
 
 /**
@@ -363,28 +292,27 @@ void blockifySync(Blockify *this, Error *error)
 }
 
 
-
 /**
  * Negotiate buffer sizes needed by neighboring filters.
  * Since our primary purpose is to resolve block size differences, we handle
- * single byte blocks (or larger) from upstream, and we match whatever
- * block size is requested downstream.
- *
- * Question: should we throw error if our requested blocksize doesn't
- * match downstream block size?  TODO: Work this out, as 1 may be a common block size even when we want buffering.
+ * single byte blocks (or larger) from upstream, and we match a multiple of
+ * whatever block size is requested downstream.
  */
 size_t blockifyBlockSize(Blockify *this, size_t prevSize, Error *error)
 {
-    /* Suggest a block size as 16K rounded up to a multiple of the previous block size. */
-    size_t suggestSize = sizeRoundUp(16*1024, prevSize);
+    /* Suggest a block size bigger than what is requested of us. */
+    size_t suggestedSize = sizeMax(this->suggestedSize, prevSize);
 
-    /* We have a suggested block size. Pass that on, but accept whatever we get back */
-    this->blockSize = passThroughBlockSize(this, suggestSize, error);
+    /* We have a suggested block size. Pass that on. */
+    size_t requestedSize = passThroughBlockSize(this, suggestedSize, error);
+
+    /* Our actual size will be a multiple of the requested size */
+    this->blockSize = sizeRoundUp(suggestedSize, requestedSize);
 
     /* Allocate a buffer. */
     this->buf = palloc(this->blockSize);
 
-    /* Tell the caller we can accept any size. */
+    /* We are buffering, so tell the caller we can accept any size. */
     return 1;
 }
 
@@ -400,14 +328,85 @@ FilterInterface blockifyInterface = (FilterInterface)
                 .fnSeek = (FilterSeek)blockifySeek,
         } ;
 
-/***********************************************************************************************************************************
-Create a new buffer filter object.
-It allocates an output buffer which matches the block size of the next filter in the pipeline.
-***********************************************************************************************************************************/
-Filter *blockifyNew(size_t blockSize, Filter *next)
+
+/**
+ Create a new buffer filter object.
+ It converts input bytes to records expected by the next filter in the pipeline.
+ */
+Filter *blockifyNew(size_t suggestedSize, Filter *next)
 {
     Blockify *this = palloc(sizeof(Blockify));
-    this->blockSize = blockSize;
+    *this = (Blockify){0};
+
+    /* Set the suggested buffersize, defaulting to 16Kb */
+    if (suggestedSize == 0)
+        this->suggestedSize = 16*1024;
+    else
+        this->suggestedSize = suggestedSize;
 
     return filterInit(this, &blockifyInterface, next);
+}
+
+
+
+/*
+ * Clean a dirty buffer by writing it to disk. Does not change the contents of the buffer.
+ */
+static bool flushBuffer(Blockify *this, Error *error)
+{
+    debug("flushBuffer: position=%zu  blockActual=%zu  dirty=%d\n", this->position, this->blockActual, this->dirty);
+
+    /* if the buffer is dirty, flush it. We reestablish assertion 3a */
+    if (this->dirty && this->blockActual > 0)
+        passThroughWriteAll(this, this->buf, this->blockActual, error);
+    this->dirty = false;
+
+    /* Update file size */
+    this->fileSize = sizeMax(this->fileSize, this->blockPosition + this->blockActual);
+
+    return isError(*error);
+}
+
+/*
+ * Read in a new buffer of data for the current position
+ */
+static bool fillBuffer (Blockify *this, Error *error)
+{
+    assert(!this->dirty);
+    debug("fillBuffer: blockActual=%zu  blockPosition=%zu sizeConfirmed=%d  fileSize=%zu\n",
+          this->blockActual, this->blockPosition, this->sizeConfirmed, this->fileSize);
+
+    /* Quick check for EOF (without system calls) */
+    /* TODO */
+
+    /* Read in the current buffer */
+    this->blockActual = passThroughReadAll(this, this->buf, this->blockSize, error);
+
+    /* if EOF or partial read, update the known file size */
+    /* TODO: */
+
+    return isError(*error);
+}
+
+static size_t copyIn(Blockify *this, Byte *buf, size_t size)
+{
+    /* Copy bytes into the buffer, up to end of data or end of buffer */
+    size_t offset = this->position - this->blockPosition;
+    size_t actual = sizeMin(this->blockSize-offset, size);
+    memcpy(this->buf + offset, buf, actual);
+
+    /* We may have extended the total data held in the buffer */
+    if (actual + offset > this->blockActual)
+        this->blockActual = actual + offset;
+
+    assert(this->blockActual <= this->blockSize);
+    return actual;
+}
+
+static size_t copyOut(Blockify *this, Byte *buf, size_t size)
+{
+    size_t offset = this->position - this->blockPosition;
+    size_t actual = sizeMin(this->blockActual-offset, size);
+    memcpy(buf, this->buf + offset, actual);
+    return actual;
 }

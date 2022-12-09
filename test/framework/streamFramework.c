@@ -67,6 +67,21 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
     PG_ASSERT_OK(error);
 }
 
+void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
+{
+    Error error = fileOpen(pipe, path, O_RDWR|O_APPEND, 0);
+    PG_ASSERT_OK(error);
+    Byte *buf = malloc(bufferSize);
+
+    generateBuffer(fileSize, buf, bufferSize);
+    size_t actual = fileWrite(pipe, buf, bufferSize, &error);
+    PG_ASSERT_OK(error);
+    PG_ASSERT_EQ(actual, bufferSize);
+
+    fileClose(pipe, &error);
+    PG_ASSERT_OK(error);
+}
+
 /* Verify a file has the correct data */
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
@@ -91,35 +106,6 @@ void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
 }
 
 
-/* Verify a file has the correct data through randomlike seeks */
-void verifyRandomFile(FileSource *pipe, char *nameFmt, size_t fileSize, size_t blockSize)
-{
-    char fileName[PATH_MAX];
-    snprintf(fileName, sizeof(fileName), nameFmt, fileSize, blockSize);
-    beginTest(fileName);
-
-    Error error = fileOpen(pipe, fileName, O_RDONLY, 0);
-    PG_ASSERT_OK(error);
-    Byte *buf = malloc(blockSize);
-
-    size_t nrBlocks = (fileSize + blockSize -1) / blockSize;
-    for (size_t idx = 0;  idx < nrBlocks; idx++)
-    {
-        /* Pick a pseudo-random block and read it */
-        size_t position = ((idx * 2) % nrBlocks) * blockSize;
-        fileSeek(pipe, position, &error);
-        PG_ASSERT_OK(error);
-        size_t actual = fileRead(pipe, buf, blockSize, &error);
-        PG_ASSERT_OK(error);
-        size_t expected = sizeMin(blockSize, fileSize-position);
-        PG_ASSERT_EQ(actual, expected);
-
-        PG_ASSERT(verifyBuffer(position, buf, actual));
-    }
-
-    fileClose(pipe, &error);
-    PG_ASSERT_OK(error);
-}
 /* Run a test on a single configuration determined by file size and buffer size */
 void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
@@ -127,10 +113,14 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
 
     beginTest(fileName);
-    generateFile(pipe, fileName, fileSize, bufferSize);
 
+    generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
+
+    appendFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize+bufferSize, 1024*1024);
 }
+
 
 /* run a matrix of tests for various file sizes and buffer sizes */
 void streamTest(FileSource *pipe, char *nameFmt)
