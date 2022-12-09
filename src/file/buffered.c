@@ -162,7 +162,7 @@ size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
  */
 size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("blockifyRead: position=%zu size=%zu\n", this->position, size);
+    debug("blockifyRead: position=%zu size=%zu blockSize=%zu\n", this->position, size, this->blockSize);
     if (!errorIsOK(*error))
         return 0;
 
@@ -194,11 +194,12 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
     this->position += actual;
 
     /* Return the number of bytes transferred. */
+    debug("blockifyRead: actual=%zu\n", actual);
     return actual;
 }
 size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("directRead: size=%zu  position=%zu\n", size, this->position);
+    debug("directRead: size=%zu  position=%zu blockSize=%zu\n", size, this->position, this->blockSize);
     /* Read multiple records, but no partials */
     size_t alignedSize = sizeRoundDown(size, this->blockSize);
     size_t actual = passThroughReadAll(this, buf, alignedSize, error);
@@ -215,6 +216,7 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
     if (actualPartial > 0)
         this->fileSize = this->position + actual;
 
+    debug("directRead: actual=0x%zu\n", actualBlock);
     return actualBlock;
 }
 

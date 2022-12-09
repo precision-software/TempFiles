@@ -117,8 +117,8 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
 
-    appendFile(pipe, fileName, fileSize, bufferSize);
-    verifyFile(pipe, fileName, fileSize+bufferSize, 1024*1024);
+    //appendFile(pipe, fileName, fileSize, bufferSize);
+    //verifyFile(pipe, fileName, fileSize+bufferSize, 64);
 }
 
 
