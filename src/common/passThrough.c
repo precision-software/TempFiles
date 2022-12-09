@@ -74,7 +74,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
  */
 size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
 {
-    /* Read the record length  */
+    /* Read the record length  TODO: create passThroughGet4(..) */
     size_t actual = passThroughReadAll(this, record, 4, error);
     if (isError(*error))
         return 0;
