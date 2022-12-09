@@ -2,9 +2,13 @@
 /* Created by John Morris on 11/1/22. */
 /* */
 #include <lz4frame.h>
-#include "common/convertFilter.h"
-#include "common/converter.h"
+#include "common/filter.h"
 #include "compress/lz4/lz4.h"
+#include "common/error.h"
+#include "common/passThrough.h"
+#include "file/fileSource.h"
+#include "file/fileSystemSink.h"
+#include "file/buffered.h"
 
 static const Error errorLZ4ContextFailed =
         (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
@@ -25,10 +29,84 @@ static bool isErrorLz4(size_t size, Error *error) {
 /* Structure holding the state of our compression/decompression filter. */
 typedef struct Lz4Compress
 {
+    Filter filter;
+
+    size_t blockSize;                 /* Configured size of uncompressed record. */
+    Byte *buf;                        /* Buffer to hold compressed data */
+    size_t blockActual;               /* The amount of compressed data in buffer */
+
+    FileSource *indexFile;
+    pos_t position;                   /* The offset of the current compressed record within the compressed file */
+
     LZ4F_preferences_t preferences;   /* Choices for compression. */
     LZ4F_cctx *cctx;                  /* Pointer to an LZ4 compression context. */
     LZ4F_dctx *dctx;                  /* Pointer to an LZ4 decompression context. */
 } Lz4Compress;
+
+
+Error lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode)
+{
+    /* Open the compressed file */
+    Error error = passThroughOpen(this, path, oflags, mode);
+
+    /* Open the index file as well. */
+    /* We should implement clone on open, and open both files using same pipeline */
+    char indexName[MAX_PATH_NAME];
+    strlcpy(indexName, path, sizeof(indexName));
+    strlcat(indexName, ".idx", sizeof(indexName));
+    this->indexFile = fileSourceNew( blockifyNew(1024*1024, fileSystemSinkNew(8)));
+    if (errorIsOK(error))
+        error = fileOpen(this->indexFile, indexName, oflags, mode);
+
+    /* Do we want to create a header containing the record size? */
+    /* For now, no. */
+
+    return error;
+}
+
+size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
+{
+    /* We send variable sized records to the next stage */
+    size_t nextSize = passThroughBlockSize(this, 1, error);
+    if (nextSize != 1)
+        return filterError(error, "lz4 Compression has mismatched record size");
+
+    /* Our caller should send us records of this size. */
+    return this->blockSize;
+}
+
+
+size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
+{
+    /* Write a variable sized record to the next stage */
+    size_t actual = lz4CompressBuffer(this, this->buf, this->blockSize, buf, size, error);
+    passThroughWriteSized(this, this->buf, actual, error);
+
+    /* Write its offset to the index file */
+    filePut8(this->indexFile, this->position, error);
+    this->position += (actual + 4);
+}
+
+size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
+{
+    /* Read a variable size record from the next stage */
+    size_t compressedActual = passThroughReadSized(this, this->buf, this->blockSize, error);
+    size_t actual = lz4DecompressBuffer(this, buf, size, this->buf, compressedActual, error);
+
+    this->position += (compressedActual + 4);
+    return actual;
+}
+
+pos_t lz4CompressSeek(Lz4Compress(Lz4Compress *this, pos_t position, Error *error)
+{
+    if (position % this->blockSize != 0)
+        return FilterError(error, "l14 Compression - must seek to a block boundary")
+
+    size_t blockNr = position / this->blockSize;
+    fileSeek(this->ihdexFile, blockNr*8, error);
+    this->position = fileGet8(this-indexFile, error);
+}
+
 
 /**
  * Start the compression.
@@ -130,11 +208,11 @@ ConverterIface lz4CompressIface =
 /**
  * Create a new LZ4 compression object.
  */
-Converter *lz4CompressNew()
+Filter *lz4CompressNew()
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){0};
-    return converterNew(this, &lz4CompressIface);
+    return filterNew(this, &lz4CompressIface);
 }
 
 /**
