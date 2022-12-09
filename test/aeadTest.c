@@ -21,6 +21,6 @@ void testMain()
                 aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                     fileSystemSinkNew(0))));
 
-    //singleStreamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 1027, 1024);
+    //singleStreamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 64, 64);
     streamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat");
 }

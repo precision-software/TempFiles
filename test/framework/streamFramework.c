@@ -7,6 +7,7 @@
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
+#include "common/debug.h"
 
 #include "framework/streamFramework.h"
 #include "framework/unitTest.h"
@@ -69,6 +70,7 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 
 void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
+    debug("appendFile: fileSize=%zu  bufferSize=%zu\n", fileSize, bufferSize);
     Error error = fileOpen(pipe, path, O_RDWR|O_APPEND, 0);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
@@ -117,8 +119,8 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
 
-    //appendFile(pipe, fileName, fileSize, bufferSize);
-    //verifyFile(pipe, fileName, fileSize+bufferSize, 64);
+    appendFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize+bufferSize, 16*1024);
 }
 
 

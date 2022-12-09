@@ -6,8 +6,8 @@
 
 #include "common/filter.h"
 
-#define debug printf
-//#define debug if (1) ; else (void)
+//#define debug printf
+#define debug if (1) ; else (void)
 
 /*
  * Quick and dirty debug function to display a buffer in hex.
@@ -15,7 +15,7 @@
  */
 static inline char *asHex(Byte *buf, size_t size)
 {
-    static char hex[1024];
+    static char hex[1024*1024];
     static char *bp = hex;
 
     /* Truncate the output to 64 bytes */

@@ -198,15 +198,12 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
     if (plainPosition == FILE_END_POSITION)
     {
         /* Get the file size and set plainPosition to the last partial block. */
-        size_t fileSize = passThroughSeek(this, FILE_END_POSITION, error);
-        plainPosition = (fileSize - this->headerSize) / this->blockSize * this->plainBlockSize;
+        size_t cipherPosition = passThroughSeek(this, FILE_END_POSITION, error);
+        plainPosition = (cipherPosition- this->headerSize) / this->blockSize * this->plainBlockSize;
 
-        /* If the last block is partial, subtract the empty size from the offset. */
-        /*  Note we are not precise, except when there is no partial block, */
-        /*  or if the partial block is empty. */
-        offset = (fileSize - this->headerSize) % this->blockSize;
-        if (offset >= this->cipherBlockSize + this->tagSize)
-            offset -= this->cipherBlockSize + this->tagSize;
+        /* We actually want file size, which is a bit bigger to account for any partial blocks at end. */
+        /*  With cipher padding, it isn't possible to get an exact plaintext file size, but an approximation will do. */
+        offset = (cipherPosition - this->headerSize) % this->blockSize - paddingSize(this, this->plainBlockSize) - this->tagSize;
     }
 
     /* Verify we are seeking to a block boundary */
@@ -214,8 +211,10 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
         return filterError(error, "Must seek to a block boundary");
 
     /* Set the new block number and go there in the downstream file. */
-    this->blockNr = plainPosition / this->plainBlockSize + 1;
-    pos_t cipherPosition = this->headerSize + (this->blockNr-1) * this->blockSize;
+    size_t plainBlockNr = plainPosition / this->plainBlockSize;
+    pos_t cipherPosition = this->headerSize +  plainBlockNr * this->blockSize;
+    this->blockNr = plainBlockNr + 1;  /* Header is block number 0 */
+    debug("aeadSeek: plainPosition=%llu  cipherPosition=%llu blockNr=%zu\n", plainPosition, cipherPosition, this->blockNr);
     passThroughSeek(this, cipherPosition, error);
 
     /* Return the new plainPosition, adding in offset if requesting file size. */
@@ -484,7 +483,8 @@ aead_encrypt(AeadFilter *this,
              Byte *tag, Error *error)
 {
 
-    debug("Encrypt: plainText='%.*s' plainSize=%d\n", (int)sizeMin(plainSize,64), plainText, plainSize);
+    //debug("Encrypt: plainText='%.*s' plainSize=%zu\n", (int)sizeMin(plainSize,64), plainText, plainSize);
+    debug("Encrypt: plainText='%.*s' plainSize=%zu\n", (int)plainSize, plainText, plainSize);
     /* Reinitialize the encryption context to start a new record */
     EVP_CIPHER_CTX_reset(this->ctx);
 
@@ -589,7 +589,8 @@ aead_decrypt(AeadFilter *this,
 
     /* Output plaintext size combines the update part of the encryption and the finalization. */
     size_t plainActual = plainUpdateSize + plainFinalSize;
-    debug("Decrypt: plainText='%.*s' plainActual=%d\n", (int)sizeMin(plainActual,64), plainText, plainActual);
+    //debug("Decrypt: plainText='%.*s' plainActual=%d\n", (int)sizeMin(plainActual,64), plainText, plainActual);
+    debug("Decrypt: plainText='%.*s' plainActual=%zu\n", plainActual, plainText, plainActual);
     return plainActual;
 }
 
