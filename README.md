@@ -24,17 +24,20 @@
  - Random writes to compressed files.
 
 
-## Block Oriented I/O
+## Record Oriented I/O
 ### Logical Model
-- A block file consists of a sequence of fixed-size blocks, followed by
-  a final block which may be smaller.
-- A block fits into memory.
-- A block is a known point for positioning.
-- To append to a block file, the last block may be overwritten.
-- Various filters may change the blocksize or add headers. These transformations 
+- A file consists of a sequence of fixed-size record, followed by
+  a final record which may be smaller.
+- A record fits into memory.
+- A record is a known point for positioning.
+- To append to a file, the last record may be overwritten.
+- Various filters may change the record size or add headers. These transformations 
   are not visible to the users of the data.
 - Can determine file size by seeking to the end.
-  ***Note: cannot currently seek in compressed files.***
+  <br>Might not be the exact file size, but must be good enough to determine number
+  of fixed size records and whether there is a partial record at the end.
+  
+***Note: cannot currently seek in compressed files.***
 
 ### Encryption
 - An encrypted file may include a fixed size header describing blocksize, initialization vector
@@ -64,11 +67,16 @@
  - Filters convert a block of data from one form to another.
  - Need to know if size change is fixed or variable.
 
-## Stages
-***NOT YET***. While filters transform data, they generally do not 
-change the structure of the files containing the data. In particular, they do not even 
-know if the data stream is being read or written. Those decisions are made by the
-"stages" in the I/O pipeline.
+### Initialization
+1. pipeline creation
+1. open file
+  1. Initiate with fileOpen() at front of pipeline.
+  1. read/create file headers
+  1. negotiate record sizes
+  2. query file size
+1. Negotiate Record size
+1. ready to exchange records
+
 
 ## Use Cases
 ### fread/fwrite/fseek replacement

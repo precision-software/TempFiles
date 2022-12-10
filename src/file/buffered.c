@@ -15,7 +15,7 @@
  *    2) All I/Os transfer an entire block, except for the final block in the file.
  *    3) The actual file is pre-positioned for the next I/O.
  *       a) If the buffer is partial or dirty, the actual file position matches blockPosition.
- *       b) If the buffer is full of clean data, the actual file position matches blockPosition+blockSize.
+ *       b) If the buffer is full of clean data, the actual file position matches blockPosition+recordSize.
  *
  *  One goal is to ensure purely sequential reads/writes do not require Seek operations.
  *
@@ -162,7 +162,7 @@ size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
  */
 size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("blockifyRead: position=%zu size=%zu blockSize=%zu\n", this->position, size, this->blockSize);
+    debug("blockifyRead: position=%zu size=%zu recordSize=%zu\n", this->position, size, this->blockSize);
     if (!errorIsOK(*error))
         return 0;
 
@@ -199,7 +199,7 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 }
 size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("directRead: size=%zu  position=%zu blockSize=%zu\n", size, this->position, this->blockSize);
+    debug("directRead: size=%zu  position=%zu recordSize=%zu\n", size, this->position, this->blockSize);
     /* Read multiple records, but no partials */
     size_t alignedSize = sizeRoundDown(size, this->blockSize);
     size_t actual = passThroughReadAll(this, buf, alignedSize, error);

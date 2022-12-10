@@ -10,20 +10,8 @@
 #include "file/fileSystemSink.h"
 #include "file/buffered.h"
 
-static const Error errorLZ4ContextFailed =
-        (Error){.code=errorCodeFilter, .msg="Unable to create LZ4 context", .causedBy=NULL};
-static const Error errorCantBothReadWrite =
-        (Error) {.code=errorCodeFilter, .msg="LZ4 compression can't read and write at the same time", .causedBy=NULL};
-
-/*
- * Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred.
- * TODO: We need to copy the message or repeated errors will change it underneath us.
- */
-static bool isErrorLz4(size_t size, Error *error) {
-    if (errorIsOK(*error) && LZ4F_isError(size))
-        *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
-    return isError(*error);
-}
+/* Forward references */
+static bool isErrorLz4(size_t size, Error *error);
 
 
 /* Structure holding the state of our compression/decompression filter. */
@@ -50,8 +38,8 @@ Error lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode)
     Error error = passThroughOpen(this, path, oflags, mode);
 
     /* Open the index file as well. */
-    /* We should implement clone on open, and open both files using same pipeline */
-    char indexName[MAX_PATH_NAME];
+    /* TODO: We should implement clone on open and use the same pipeline */
+    char indexName[MAXPGPATH];
     strlcpy(indexName, path, sizeof(indexName));
     strlcat(indexName, ".idx", sizeof(indexName));
     this->indexFile = fileSourceNew( blockifyNew(1024*1024, fileSystemSinkNew(8)));
@@ -254,15 +242,6 @@ size_t lz4DecompressEnd(Lz4Compress *this, Byte *toBuf, size_t toSize, Error *er
 }
 
 
-/**
- * Estimate the decompressed size of a compressed buffer.
- * It is OK to be sloppy, as Lz4DecompressProcess() can handle bad estimates.
- */
-size_t lz4DecompressSize(Lz4Filter *this, size_t fromSize)
-{
-    return 3 * fromSize;  /* Crude estimate, but doesn't need to be precise. */
-}
-
 
 /**
  * Free up resources used for decompression.
@@ -300,7 +279,18 @@ Converter *lz4DecompressNew()
  * Create a filter for writing and reading compressed files.
  * @param bufferSize - suggested buffer size for efficiency.
  */
-Filter *lz4FilterNew(size_t bufferSize, Filter *next)
+Filter *lz4CompressionNew(size_t bufferSize, Filter *next)
 {
     return convertFilterNew(bufferSize, lz4CompressNew(), lz4DecompressNew(), next);
+}
+
+
+/*
+ * Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred.
+ * TODO: We need to copy the message or repeated errors will change it underneath us.
+ */
+static bool isErrorLz4(size_t size, Error *error) {
+    if (errorIsOK(*error) && LZ4F_isError(size))
+        *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
+    return isError(*error);
 }

@@ -101,5 +101,9 @@ inline static size_t sizeMax(size_t a, size_t b) {return (a>b)?a:b;}
 inline static size_t sizeRoundDown(size_t size, size_t factor) {return size - size % factor;}
 inline static size_t sizeRoundUp(size_t size, size_t factor) {return sizeRoundDown(size + factor - 1, factor);}
 
+#ifndef MAXPGPATH
+#define MAXPGPATH (1024)
+#endif
+
 
 #endif /*UNTITLED1_FILTER_H */

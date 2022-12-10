@@ -4,9 +4,6 @@ project(filter C)
 set(CMAKE_C_STANDARD 99)
 include_directories(src /opt/local/include test)
 link_directories(/opt/local/lib /opt/homebrew/Cellar/openssl@1.1/1.1.1s/lib)
-#link_libraries(malloc_ss)
-
-
 
 add_executable(rawTest test/rawTest.c
         test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h

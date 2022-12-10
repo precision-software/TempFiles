@@ -138,7 +138,7 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     {
         /* Pick a pseudo-random block and seek to it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
-        //printf("fileSeek - idx = %u  blockNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
+        //printf("fileSeek - idx = %u  recordNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
         fileSeek(pipe, position, &error);
         PG_ASSERT_OK(error);
 
