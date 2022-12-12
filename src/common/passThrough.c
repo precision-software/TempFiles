@@ -39,7 +39,7 @@ size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *err
 
 /**
  * Helper to repeatedly read from the next filter in the pipeline until small amount of data left to read, eof, or error.
- * Our buffer must be prepared to read at least *readSize* bytes, so we stop when the remaining buffer is too small to hold them.
+ * Our buffer must be prepared to read at least *maxReadPosition* bytes, so we stop when the remaining buffer is too small to hold them.
  */
 size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 {
@@ -51,7 +51,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
     /* Repeat until all the bytes are read (or EOF) */
     while (size > 0 && errorIsOK(*error))
     {
-        /* Issue the next read, exiting on error or eof. Note size must be >= this->readSize. */
+        /* Issue the next read, exiting on error or eof. Note size must be >= this->maxReadPosition. */
         size_t actualSize = passThroughRead(this, buf, size, error);
 
         /* Update the bytes transferred so far. */

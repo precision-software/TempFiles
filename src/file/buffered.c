@@ -237,16 +237,14 @@ size_t blockifySeek(Blockify *this, size_t position, Error *error)
         flushBuffer(this, error);
         this->blockPosition = FILE_END_POSITION;  /* An invalid position so we will always seek */
 
-        /* Get the actual file size which will be our new position */
+        /* Get the actual file size, and position ourselves at end of last full block */
         this->fileSize = passThroughSeek(this, FILE_END_POSITION, error);
-
-        /* Our desired position is at the end of file */
         position = this->fileSize;
     }
 
     /* If we are moving to a different block ... */
     size_t newBlock = sizeRoundDown(position, this->blockSize);
-    debug("blockifySeek: position=%zu  newBlock=%zu\n", position, newBlock);
+    debug("blockifySeek: position=%zu  newBlock=%zu blockPosition=%zu\n", position, newBlock, this->blockPosition);
     if (newBlock != this->blockPosition)
     {
         /* If dirty, flush current block. */
@@ -396,6 +394,8 @@ static size_t copyIn(Blockify *this, Byte *buf, size_t size)
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockSize-offset, size);
     memcpy(this->buf + offset, buf, actual);
+    debug("copyIn: size=%zu blockPosition=%zu blockActual=%zu offset=%zu  actual=%zu\n",
+          size, this->blockPosition, this->blockActual, offset, actual);
 
     /* We may have extended the total data held in the buffer */
     if (actual + offset > this->blockActual)
@@ -410,5 +410,7 @@ static size_t copyOut(Blockify *this, Byte *buf, size_t size)
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockActual-offset, size);
     memcpy(buf, this->buf + offset, actual);
+    debug("copyOut: size=%zu blockPosition=%zu blockActual=%zu offset=%zu  actual=%zu\n",
+          size, this->blockPosition, this->blockActual, offset, actual);
     return actual;
 }

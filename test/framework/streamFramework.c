@@ -87,6 +87,7 @@ void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
 /* Verify a file has the correct data */
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
+    debug("verifyFile: path=%s  fileSize=%zu  bufferSize=%zu\n", path, fileSize, bufferSize);
     Error error = fileOpen(pipe, path, O_RDONLY, 0);
     Byte *buf = malloc(bufferSize);
 

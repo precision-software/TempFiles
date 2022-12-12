@@ -52,7 +52,7 @@ static const Error errorNotImplemented = (Error){.code=errorCodeFilter, .msg="No
 /* Convenience functions to update error and return 0 in one statement */
 inline static int setError(Error *error, Error newError)
 {
-    if (errorIsOK(*error))
+    if (errorIsOK(*error) || errorIsEOF(*error))
         *error = newError;
     return 0;
 }
