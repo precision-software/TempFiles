@@ -94,6 +94,9 @@ size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
 
 size_t passThroughWriteSized(void *this, Byte *record, size_t size, Error *error)
 {
+    if (isError(*error))
+        return 0;
+
     /* Write out the 32-bit size in network byte order (big endian) */
     Byte sizeBuf[4];
     Byte *bp = sizeBuf;
@@ -117,3 +120,20 @@ size_t dummyBlockSize(Filter *this, size_t size, Error *error)
  * Defines a "no-op" filter, mainly to use as a placeholder.
  */
 FilterInterface passThroughInterface = (FilterInterface) {.fnBlockSize = (FilterBlockSize)dummyBlockSize};
+
+
+bool passThroughPut8(void *this, size_t value, Error *error)
+{
+    Byte buf[8]; Byte *bp = buf;
+    pack8(&bp, bp + 8, value);
+    passThroughWriteAll(this, buf, 8, error);
+    return bp > bp + 8;
+}
+
+size_t passThroughGet8(void *this, Error *error)
+{
+    Byte buf[8]; Byte *bp = buf;
+    passThroughReadAll(this, buf, 8, error);
+
+    return unpack8(&bp, buf+8);
+}

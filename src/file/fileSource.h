@@ -22,4 +22,14 @@ pos_t fileSeek(FileSource *this, pos_t position, Error *error);
 /* Formatted write to a file */
 void filePrintf(FileSource *this, Error *error, char *fmt, ...);
 
+/* Some renaming */
+#define filePut1 passThroughPut1
+#define filePut2 passThroughPut2
+#define filePut4 passThroughPut4
+#define filePut8 passThroughPut8
+#define fileGet1 passThroughGet1
+#define fileGet2 passThroughGet2
+#define fileGet4 passThroughGet4
+#define fileGet8 passThroughGet8
+
 #endif /*FILTER_FILESOURCE_H */

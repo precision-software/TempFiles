@@ -6,9 +6,9 @@
 #define FILTER_LZ4_H
 #include "common/filter.h"
 
-typedef struct Lz4Filter Lz4Filter;
+typedef struct Lz4Compress Lz4Compress;
 
-Filter *lz4FilterNew(size_t bufferSize, Filter *next);
-void Lz4FilterFree(void *this);
+Filter *lz4CompressNew(size_t bufferSize, Filter *next);
+void Lz4CompressFree(void *this);
 
 #endif /*FILTER_LZ4_H */
