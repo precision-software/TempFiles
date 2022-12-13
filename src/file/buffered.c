@@ -130,13 +130,11 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 
     /* If we are dirtying a clean buffer, then seek backwards to the start of buffer */
     if (!this->dirty)
-    {
         passThroughSeek(this, this->blockPosition, error);
-        this->dirty = true;
-    }
 
     /* Copy data in and update position */
     size_t actual = copyIn(this, buf, size);
+    this->dirty = true;
     this->position += actual;
 
     assert(actual > 0);
