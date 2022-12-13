@@ -129,19 +129,18 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
     }
 
     /* If we are dirtying a clean buffer, then seek backwards to the start of buffer */
-    if (!this->dirty)
-    {
+    if (this->blockActual > 0 && !this->dirty)
         passThroughSeek(this, this->blockPosition, error);
-        this->dirty = true;
-    }
 
     /* Copy data in and update position */
     size_t actual = copyIn(this, buf, size);
     this->position += actual;
+    this->dirty = true;
 
     assert(actual > 0);
     return actual;
 }
+
 
 size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
 {
@@ -354,7 +353,7 @@ Filter *blockifyNew(size_t suggestedSize, Filter *next)
  */
 static bool flushBuffer(Blockify *this, Error *error)
 {
-    debug("flushBuffer: position=%zu  blockActual=%zu  dirty=%d\n", this->position, this->blockActual, this->dirty);
+    debug("flushBuffer: position=%zu  bufActual=%zu  dirty=%d\n", this->position, this->blockActual, this->dirty);
 
     /* if the buffer is dirty, flush it. We reestablish assertion 3a */
     if (this->dirty && this->blockActual > 0)
@@ -373,7 +372,7 @@ static bool flushBuffer(Blockify *this, Error *error)
 static bool fillBuffer (Blockify *this, Error *error)
 {
     assert(!this->dirty);
-    debug("fillBuffer: blockActual=%zu  blockPosition=%zu sizeConfirmed=%d  fileSize=%zu\n",
+    debug("fillBuffer: bufActual=%zu  blockPosition=%zu sizeConfirmed=%d  fileSize=%zu\n",
           this->blockActual, this->blockPosition, this->sizeConfirmed, this->fileSize);
 
     /* Quick check for EOF (without system calls) */
@@ -394,7 +393,7 @@ static size_t copyIn(Blockify *this, Byte *buf, size_t size)
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockSize-offset, size);
     memcpy(this->buf + offset, buf, actual);
-    debug("copyIn: size=%zu blockPosition=%zu blockActual=%zu offset=%zu  actual=%zu\n",
+    debug("copyIn: size=%zu blockPosition=%zu bufActual=%zu offset=%zu  actual=%zu\n",
           size, this->blockPosition, this->blockActual, offset, actual);
 
     /* We may have extended the total data held in the buffer */
@@ -410,7 +409,7 @@ static size_t copyOut(Blockify *this, Byte *buf, size_t size)
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockActual-offset, size);
     memcpy(buf, this->buf + offset, actual);
-    debug("copyOut: size=%zu blockPosition=%zu blockActual=%zu offset=%zu  actual=%zu\n",
+    debug("copyOut: size=%zu blockPosition=%zu bufActual=%zu offset=%zu  actual=%zu\n",
           size, this->blockPosition, this->blockActual, offset, actual);
     return actual;
 }
