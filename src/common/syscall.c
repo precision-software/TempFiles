@@ -27,7 +27,7 @@ size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
         retVal = 0;
     }
 
-    debug("sys_read: size=%zu actual=%zd\n", size, retVal);
+    debug("sys_read: fd=%d size=%zu actual=%zd  msg=%s\n", fd, size, retVal, error->msg);
     return (size_t) retVal;
 }
 
@@ -38,7 +38,6 @@ size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
  */
 size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
 {
-    debug("sys_write: size=%zu\n", size);
     if (isError(*error))
         return 0;
 
@@ -48,6 +47,8 @@ size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
         *error = systemError();
         retVal = 0;
     }
+
+    debug("sys_write: fd=%d size=%zu  msg=%s\n", fd, size, error->msg);
 
     return (size_t) retVal;
 
@@ -60,13 +61,13 @@ size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
  */
 int sys_open(char *path, int oflag, int perm, Error *error)
 {
-    debug("sys_open: path=%s\n", path);
     if (isError(*error)) return -1;
 
     int fd = open(path, oflag, perm);
     if (fd == -1)
         *error = systemError();
 
+    debug("sys_open: fd=%d  path=%s  msg=%s\n", fd, path, error->msg);
     return fd;
 }
 
@@ -118,6 +119,6 @@ pos_t sys_lseek(int fd, pos_t position, Error *error)
     if (ret == -1)
         *error = systemError();
 
-    debug("sys_lseek: position=%lld  ret=%lld\n", (off_t)position, ret);
+    debug("sys_lseek: fd=%d  position=%lld  ret=%lld\n", fd, (off_t)position, ret);
     return (pos_t)ret;
 }

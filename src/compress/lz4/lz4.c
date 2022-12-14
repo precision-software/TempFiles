@@ -34,6 +34,9 @@ struct Lz4Compress
 
     LZ4F_preferences_t preferences;   /* Choices for compression. */
 
+    Byte *tempBuf;                    /* temporary buffer to hold decrypted data when probing for size */
+
+    bool previousRead;                /* true if the previous op was a read (or equivaleht) */
 };
 
 
@@ -47,9 +50,13 @@ Error lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode)
     char indexName[MAXPGPATH];
     strlcpy(indexName, path, sizeof(indexName));
     strlcat(indexName, ".idx", sizeof(indexName));
-    this->indexFile = fileSourceNew( blockifyNew(1024*1024, fileSystemSinkNew(8)));
+    this->indexFile = fileSourceNew( fileSystemSinkNew(8));  /* Unbuffered for now so we can see system calls */
     if (errorIsOK(error))
         error = fileOpen(this->indexFile, indexName, oflags, mode);
+
+    /* Make note we are at the start of the compressed file */
+    this->compressedPosition = 0;
+    this->previousRead = true;
 
     /* Do we want to create a header containing the record size? */
     /* TODO: later. */
@@ -67,6 +74,7 @@ size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
     /* Allocate a buffer to hold a compressed record */
     this->compressedSize = compressedSize(this->recordSize);
     this->buf = malloc(this->compressedSize);
+    this->tempBuf = malloc(this->recordSize);
 
     /* Our caller should send us records of this size. */
     return this->recordSize;
@@ -75,58 +83,63 @@ size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 
 size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
-    /* Assert: we are 1) at end of previous record, and 2) at end of previous index. */
-
-    /* We write one record at a time */
+    /* We do one record at a time */
     size = sizeMin(size, this->recordSize);
+
+    debug("lz4Write: size=%zu  compressedPosition=%llu\n", size, this->compressedPosition);
+
+    /* If previous read, synchronize the index by writing out offset to start of current record */
+    if (this->previousRead)
+        filePut8(this->indexFile, this->compressedPosition, error);
+    this->previousRead = false;
 
     /* Compress the record, and write it out as a variable sized record */
     size_t actual = lz4CompressBuffer(this, this->buf, this->compressedSize, buf, size, error);
     passThroughWriteSized(this, this->buf, actual, error);
-
-    /* Write its offset to the index file */
-    filePut8(this->indexFile, this->compressedPosition, error);
     if (isError(*error))
         return 0;
 
-    /* Update our compressedPosition within the compressed file, adding in the length field. */
+    /* Update our file position */
     this->compressedPosition += (actual + 4);
 
-    /* Assert: We are positioned 1) at end of record, and 2) at end of index entry. */
+    /* If we wrote a full block, write out an index entry */
+    if (size == this->recordSize)
+        filePut8(this->indexFile, this->compressedPosition, error);
+
     return size;
 }
 
 size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
+    /* We do one record at a time */
+    size = sizeMin(size, this->recordSize);
+
+    debug("lz4Read: size=%zu  compressedPosition=%llu\n", size, this->compressedPosition);
     if (isError(*error))
         return 0;
 
-    /* Read the index and compressed record together. We need to keep index and file positions in sync */
-    Error indexError = errorOK;
-    size_t compressedPosition = fileGet8(this->indexFile, &indexError);
+    /* If last op was a read, read the index so we stay in sync */
+    if (this->previousRead)
+        fileGet8(this->indexFile, error);
+    this->previousRead = true;
+
+    /* Read the compressed record, */
     size_t compressedActual = passThroughReadSized(this, this->buf, this->compressedSize, error);
-    debug("lz4Read: size=%zu  compresssedPosition=%llu compressedActual=%zu\n", size, this->compressedPosition, compressedActual);
-
-    /* Both the index and compressed file should hit EOF together, and the offsets should match */
-    if (errorIsOK(indexError) && errorIsOK(*error) && compressedPosition+compressedActual+4 != this->compressedPosition
-       || errorIsEOF(indexError) != errorIsEOF(*error))
-        return filterError(error, "lz4: index is inconsistent");
-
-    debug("lz4Read: size=%zu  compresssedPosition=%llu compressedActual=%zu\n", size, this->compressedPosition, compressedActual);
-    size_t actual = lz4DecompressBuffer(this, buf, size, this->buf, compressedActual, error);
-
     if (isError(*error))
         return 0;
 
-    /* Advance our position to reflect the read.*/
+    /* Update the compressed file position to be afterr the record. */
     this->compressedPosition += (compressedActual + 4);
+
+    /* Decompress the record we just read. */
+    size_t actual = lz4DecompressBuffer(this, buf, size, this->buf, compressedActual, error);
 
     return actual;
 }
 
 pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
 {
-    size_t lastSize = 0;
+    debug("lzSeek (start): position=%lld  compressedPosition=%llu\n", position, this->compressedPosition);
 
     /* If seeking to the end, ... */
     if (position == FILE_END_POSITION)
@@ -135,45 +148,59 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
         size_t indexSize = fileSeek(this->indexFile, FILE_END_POSITION, error);
         size_t nrRecords = indexSize / 8;
 
-        /* If the index file contains records, ...*/
-        if (nrRecords > 0)
-        {
-            /* Get offset of the last record */
-            fileSeek(this->indexFile, (nrRecords - 1) * 8, error);
-            position = fileGet8(this->indexFile, error);
+        /* if index file is empty, the data file should be as well.  TODO: should we verify? */
+        if (nrRecords == 0)
+            return 0;
 
-            /* Read the last record */
-            lz4CompressSeek(this, position, error);
-            lastSize = lz4CompressRead(this, this->buf, this->compressedSize, error);
+        /* Seek to the final partial record, if any */
+        pos_t lastPosition = (nrRecords-1) * this->recordSize;
+        lz4CompressSeek(this, lastPosition, error);
 
-            /* If the last record was full, then our desired position is at its end. */
-            if (lastSize == this->recordSize)
-            {
-                position += lastSize;
-                lastSize = 0;
-            }
-        }
+        /* read the final partial record, treating EOF like a zero length partial record */
+        size_t lastSize = lz4CompressRead(this, this->tempBuf, this->recordSize, error);
+        if (errorIsEOF(*error))
+            *error = errorOK;
+
+        /* If the last record was partial, then go back to its starting position. */
+        if (errorIsOK(*error) && lastSize < this->recordSize)
+            lz4CompressSeek(this, lastPosition, error);
+
+        debug("lz4Seek (end of  file): lastPosition=%llu lastSize=%zu  compressedPosition=%llu\n", lastPosition, lastSize, this->compressedPosition);
+
+        /* Done. Return the file size, and we are positioned at end of last full record */
+        return lastPosition + lastSize;
     }
 
+    /* otherwise, seeking to a file position */
     /* Verify we are seeking to a record boundary */
     if (position % this->recordSize != 0)
         return filterError(error, "l14 Compression - must seek to a block boundary");
 
-    /* Get the compressed seek position from the index */
+    /* Read from the index to get the position in the compressed file. */
     size_t recordNr = position / this->recordSize;
     fileSeek(this->indexFile, recordNr*8, error);
     this->compressedPosition = fileGet8(this->indexFile, error);
 
-    /* Synchronize index to beginning of current record */
-    fileSeek(this->indexFile, recordNr*8, error);
-    debug("lz4Seek: position=%llu   compressedPosition=%llu   lastSize=%zu\n", position, this->compressedPosition, lastSize);
+    /* To keep index and data in sync, this is like a write */
+    this->previousRead = false;
 
-    /* Seek to the corresponding record */
+    /* When seeking to position 0 in a new file, it is OK to get an EOF reading the index */
+    if (errorIsEOF(*error) && position == 0)
+    {
+        this->previousRead = true;
+        this->compressedPosition = 0;
+        *error = errorOK;
+    }
+
+    debug("lz4Seek: position=%llu   compressedPosition=%llu \n", position, this->compressedPosition);
+
+    /* Seek to corresponding record */
     passThroughSeek(this, this->compressedPosition, error);
 
-    /* Assert: We are positioned at 1) beginning of record, and 2) beginning of index entry */
+    /* To keep index and data in sync, this is like a write */
+    this->previousRead = false;
 
-    return position + lastSize;
+    return position;
 }
 
 void lz4CompressClose(Lz4Compress *this, Error *error)
@@ -182,6 +209,8 @@ void lz4CompressClose(Lz4Compress *this, Error *error)
     passThroughClose(this, error);
     free(this->buf);
     this->buf = NULL;
+    free(this->tempBuf);
+    this->tempBuf = NULL;
 }
 
 
@@ -253,8 +282,10 @@ size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *
         return 0;
 
     /* Decompress "fromBuf" into "toBuf", recording any possible error. */
+    memset(toBuf, 'Y', toSize);  // debug
     size_t actualFromSize = fromSize;
-    if (isErrorLz4(LZ4F_decompress(dctx, toBuf, &toSize, fromBuf, &actualFromSize, NULL), error))
+    size_t ret = LZ4F_decompress(dctx, toBuf, &toSize, fromBuf, &actualFromSize, NULL);
+    if (isErrorLz4(ret, error))
         return 0;
 
     /* We should have consumed all the bytes. If not, we probably are generating more output than expected */

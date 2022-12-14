@@ -6,8 +6,8 @@
 
 #include "common/filter.h"
 
-#define debug(args...) printf(args)
-//#define debug(...) ((void) 0)
+//#define debug(args...) printf(args)
+#define debug(...) ((void) 0)
 
 /*
  * Quick and dirty debug function to display a buffer in hex.
@@ -19,8 +19,8 @@ static inline char *asHex(Byte *buf, size_t size)
     static char *bp = hex;
 
     /* Truncate the output to 64 bytes */
-    if (size > 64)
-        size = 64;
+    //if (size > 64)
+    //    size = 64;
 
     /* Wrap around - we can provide a limited number of hex conversion in one printf */
     if (bp + 2 * size > hex + sizeof(hex) - 1)

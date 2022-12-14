@@ -70,6 +70,8 @@ struct AeadFilter
     pos_t position;
     pos_t maxReadPosition;        /* Biggest position after reading */
     pos_t maxWritePosition;       /* Biggest position after writing */
+
+    Byte *tempBuf;                /* A buffer to temporarily hold a decrypted record */
 };
 
 
@@ -233,7 +235,9 @@ void aeadFilterClose(AeadFilter *this, Error *error)
 
     /* TODO: free all resources includiong ctx and cipher */
     free(this->buf);
+    free(this->tempBuf);
     this->buf = NULL;
+    this->tempBuf = NULL;
 }
 
 
@@ -267,7 +271,8 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
         this->position = this->recordNr * this->plainRecordSize;
 
         /* Read and decrypt the last record. Because of possible padding, we need to decrypt to determine size. */
-        partialSize = aeadFilterRead(this, this->buf, this->plainRecordSize, error);
+        /*  TODO: Read into a different buffer - this->buf is used internally to hold encrypted text */
+        partialSize = aeadFilterRead(this, this->tempBuf, this->plainRecordSize, error);
 
         /* If the last record was size 0, then we just got an EOF.  Ignore it. */
         if (errorIsEOF(*error))
@@ -306,6 +311,7 @@ size_t aeadFilterBlockSize(AeadFilter *this, size_t prevSize, Error *error)
 
     /* Allocate a buffer to hold a block of encrypted data. */
     this->buf = malloc(this->recordSize);  /* TODO: memory mgmt */
+    this->buf = malloc(this->plainRecordSize);
 
     /* Tell the previous stage they must accommodate our plaintext block size. */
     return this->plainRecordSize;
