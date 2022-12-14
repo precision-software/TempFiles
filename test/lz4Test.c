@@ -8,7 +8,8 @@
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
 
-#include "framework/streamFramework.h"
+#include "framework/fileFramework.h"
+#include "framework/unitTest.h"
 
 
 void testMain()
@@ -21,7 +22,7 @@ void testMain()
                 lz4CompressNew(1024,
                     fileSystemSinkNew(1))));
 
-    singleStreamTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1024, 1024);
-    streamTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4");
+    singleReadSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1024, 1024);
+    readSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4");
 
 }

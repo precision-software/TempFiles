@@ -7,7 +7,7 @@
 #include "encrypt/libcrypto/aead.h"
 #include "file/fileSource.h"
 
-#include "framework/seekFramework.h"
+#include "framework/fileFramework.h"
 #include "framework/unitTest.h"
 
 void testMain()

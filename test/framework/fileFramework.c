@@ -9,7 +9,7 @@
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
-#include "framework/seekFramework.h"
+#include "framework/fileFramework.h"
 #include "framework/unitTestInternal.h"
 
 void seekTest(FileSource *pipe, char *nameFmt);
@@ -221,10 +221,23 @@ void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t buf
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
     beginTest(fileName);
 
+    /* create and read back as a stream I/
+    generateFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize, bufferSize);
+
+    /* Fill in the file with garbage, then write it out as random writes */
     allocateFile(pipe, fileName, fileSize, bufferSize);
     generateRandomFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
-    verifyRandomFile(pipe, fileName, fileSize, bufferSize);
+
+    /* append to the file */
+    appendFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize+bufferSize, 16*1024);
+
+    /* Read back as random reads */
+    verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
+
+
 }
 
 /* run a matrix of tests for various file sizes and I/O sizes.  All will use a 1K block size. */
@@ -238,4 +251,66 @@ void seekTest(FileSource *pipe, char *nameFmt)
         for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
             if  (fileSize[fileIdx] / bufSize[bufIdx] < 4*1024*1024)  // Keep nr blocks under 4M to complete in reasonable time.
                 singleSeekTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
+}
+
+
+
+/* Run a test on a single configuration determined by file size and buffer size */
+void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+{
+    char fileName[PATH_MAX];
+    snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
+
+    beginTest(fileName);
+
+    generateFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize, bufferSize);
+
+    appendFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize+bufferSize, 16*1024);
+}
+
+
+/* run a matrix of tests for various file sizes and buffer sizes */
+void streamTest(FileSource *pipe, char *nameFmt)
+{
+    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
+    size_t bufSize[] = {1024, 32*1024, 64, 1};
+#define countof(array) (sizeof(array)/sizeof(array[0]))
+
+    for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)
+        for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
+            singleStreamTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
+}
+
+
+
+/* Run a test on a single configuration determined by file size and buffer size */
+void singleReadSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+{
+    char fileName[PATH_MAX];
+    snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
+
+    beginTest(fileName);
+
+    generateFile(pipe, fileName, fileSize, bufferSize);
+    verifyFile(pipe, fileName, fileSize, bufferSize);
+
+    verifyRandomFile(pipe, fileName, fileSize, bufferSize);
+
+    appendFile(pipe, fileName, fileSize, bufferSize);
+    verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
+}
+
+
+/* run a matrix of tests for various file sizes and buffer sizes */
+void readSeekTest(FileSource *pipe, char *nameFmt)
+{
+    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
+    size_t bufSize[] = {1024, 32*1024, 64, 1};
+#define countof(array) (sizeof(array)/sizeof(array[0]))
+
+    for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)
+        for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
+            singleStreamTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
 }

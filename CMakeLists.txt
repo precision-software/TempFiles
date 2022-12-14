@@ -15,7 +15,7 @@ add_executable(rawTest test/rawTest.c
 
 add_executable(rawSeekTest test/rawSeekTest.c
         test/framework/unitTestInternal.h test/framework/unitTest.h
-        test/framework/seekFramework.c  test/framework/seekFramework.h
+        test/framework/fileFramework.c test/framework/fileFramework.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
@@ -35,7 +35,7 @@ add_executable(blockifyTest test/blockifyTest.c
 add_executable(seekTest test/seekTest.c
         src/file/buffered.c src/file/buffered.h
         test/framework/unitTestInternal.h test/framework/unitTest.h
-        test/framework/seekFramework.c  test/framework/seekFramework.h
+        test/framework/fileFramework.c test/framework/fileFramework.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
@@ -56,7 +56,7 @@ target_link_libraries(aeadTest crypto)
 
 add_executable(aeadSeekTest test/aeadSeekTest.c
         src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
-        test/framework/unitTestInternal.h test/framework/seekFramework.c test/framework/seekFramework.h test/framework/unitTest.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
@@ -68,7 +68,7 @@ target_link_libraries(aeadSeekTest crypto)
 
 add_executable(lz4Test test/lz4Test.c
         src/compress/lz4/lz4.c  src/compress/lz4/lz4.h  src/file/buffered.h src/file/buffered.c
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
