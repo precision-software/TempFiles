@@ -40,19 +40,16 @@ struct Lz4Compress
 };
 
 
-Error lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode)
+Filter *lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode, Error *error)
 {
     /* Open the compressed file */
-    Error error = passThroughOpen(this, path, oflags, mode);
+    Filter *next = passThroughOpen(this, path, oflags, mode, error);
 
     /* Open the index file as well. */
-    /* TODO: We should implement clone on open and use the same pipeline */
     char indexName[MAXPGPATH];
     strlcpy(indexName, path, sizeof(indexName));
     strlcat(indexName, ".idx", sizeof(indexName));
-    this->indexFile = fileSourceNew( fileSystemSinkNew(8));  /* Unbuffered for now so we can see system calls */
-    if (errorIsOK(error))
-        error = fileOpen(this->indexFile, indexName, oflags, mode);
+    Filter *indexFile = passThroughOpen(this, path, oflags, mode, error);
 
     /* Make note we are at the start of the compressed file */
     this->compressedPosition = 0;
@@ -61,12 +58,17 @@ Error lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode)
     /* Do we want to create a header containing the record size? */
     /* TODO: later. */
 
-    return error;
+    return lz4CompressNew(this->recordSize, next);
 }
 
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 {
-    /* We send variable sized records to the next stage, so treat as byte stream. */
+    /* Starting with the index file, we send 4 byte records */
+    size_t indexSize = passThroughBlockSize(this->indexFile, sizeof(pos_t), error);
+    if (sizeof(pos_t) % indexSize != 0)
+        return filterError(error, "lz4 index file has incompatible record size");
+
+    /* For our data file, we send variable sized records to the next stage, so treat as byte stream. */
     size_t nextSize = passThroughBlockSize(this, 1, error);
     if (nextSize != 1)
         return filterError(error, "lz4 Compression has mismatched record size");

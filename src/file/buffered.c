@@ -69,7 +69,7 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
 /**
  * Open a buffered file, reading, writing or both.
  */
-Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
+Filter *blockifyOpen(Blockify *this, char *path, int oflags, int perm, Error *error)
 {
     /* Are we read/writing or both? */
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
@@ -88,9 +88,9 @@ Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
     this->sizeConfirmed = (oflags & O_TRUNC) == O_TRUNC;
 
     /* Pass the open event to the next filter to actually open the file. */
-    Error error = passThroughOpen(this, path, oflags, perm);
+    Filter *next = passThroughOpen(this, path, oflags, perm, error);
 
-    return error;
+    return blockifyNew(this->suggestedSize, next);
 }
 
 

@@ -17,22 +17,25 @@ struct FileSource {
 /**
  * Open a file, returning error information.
  */
-Error fileOpen(FileSource *this, char *path, int oflags, int perm)
+FileSource *fileOpen(FileSource *this, char *path, int oflags, int perm, Error *error)
 {
     /* Appending to a file is tricky for encrypted/compressed files. */
     bool append = (oflags & O_APPEND) != 0;
     oflags &= (~O_APPEND);
 
     /* Open the file */
-    Error error = passThroughOpen(this, path, oflags, perm);
-    if (errorIsOK(error))
-        passThroughBlockSize(this, this->blockSize, &error);
+    Filter *next = passThroughOpen(this, path, oflags, perm, error);
+    FileSource *new = fileSourceNew(next);
+
+    /* Negotiate record sizes */
+    if (errorIsOK(*error))
+        passThroughBlockSize(new, this->blockSize, error);
 
     /* If we are appending, then seek to the end. */
     if (append)
-        fileSeek(this, FILE_END_POSITION, &error);  /* TODO: EOF or last block? */
+        fileSeek(new, FILE_END_POSITION, error);
 
-    return error;
+    ;
 }
 
 /**
@@ -69,7 +72,8 @@ void fileClose(FileSource *this, Error *error)
 {
     if (errorIsEOF(*error))
         *error = errorOK;
-    return passThroughClose(this, error);
+    passThroughClose(this, error);
+    free(this);
 }
 
 

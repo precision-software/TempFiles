@@ -35,6 +35,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "file/fileSource.h"
 #include "common/error.h"
 
 #define BEGIN do {
@@ -69,7 +70,7 @@ typedef struct Filter {
 /***********************************************************************************************************************************
 A set of functions a filter provides, one for each type of event.
 ***********************************************************************************************************************************/
-typedef Error (*FilterOpen)(void *this, char *path, int mode, int perm);
+typedef Filter *(*FilterOpen)(void *this, char *path, int mode, int perm, Error *error);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
