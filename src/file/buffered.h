@@ -8,6 +8,6 @@
 #include "common/filter.h"
 
 typedef struct Blockify Blockify;
-Filter *blockifyNew(size_t blockSize, Filter *next);
+Blockify *blockifyNew(size_t blockSize, void *next);
 
 #endif /*UNTITLED1_ByteStream_H */

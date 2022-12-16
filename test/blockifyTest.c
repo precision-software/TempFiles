@@ -5,9 +5,9 @@
 #include "file/fileSource.h"
 #include "file/fileSystemSink.h"
 #include "file/buffered.h"
-#include "fileSplit/fileSplit.h"
 
-#include "framework/streamFramework.h"
+#include "framework/fileFramework.h"
+#include "framework/unitTest.h"
 
 
 void testMain()

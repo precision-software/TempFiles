@@ -40,25 +40,27 @@ struct Lz4Compress
 };
 
 
-Filter *lz4CompressOpen(Lz4Compress *this, char *path, int oflags, int mode, Error *error)
+Filter *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Error *error)
 {
-    /* Open the compressed file */
-    Filter *next = passThroughOpen(this, path, oflags, mode, error);
+    /* Open the compressed file and clone ourselves */
+    Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
+    Lz4Compress *this = lz4CompressNew(pipe->recordSize, next);
 
     /* Open the index file as well. */
-    char indexName[MAXPGPATH];
-    strlcpy(indexName, path, sizeof(indexName));
-    strlcat(indexName, ".idx", sizeof(indexName));
-    Filter *indexFile = passThroughOpen(this, path, oflags, mode, error);
+    /*   FileSource is a dummy wrapper to support "fileRead" and "fileWrite" type functions */
+    char indexPath[MAXPGPATH];
+    strlcpy(indexPath, path, sizeof(indexPath));
+    strlcat(indexPath, ".idx", sizeof(indexPath));
+    this->indexFile = fileSourceNew(passThroughOpen(this, indexPath, oflags, mode, error));
 
     /* Make note we are at the start of the compressed file */
     this->compressedPosition = 0;
     this->previousRead = true;
 
-    /* Do we want to create a header containing the record size? */
+    /* Do we want to write a file header containing the record size? */
     /* TODO: later. */
 
-    return lz4CompressNew(this->recordSize, next);
+    return (Filter *)this;
 }
 
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
@@ -209,10 +211,11 @@ void lz4CompressClose(Lz4Compress *this, Error *error)
 {
     fileClose(this->indexFile, error);
     passThroughClose(this, error);
-    free(this->buf);
-    this->buf = NULL;
-    free(this->tempBuf);
-    this->tempBuf = NULL;
+    if (this->buf != NULL)
+        free(this->buf);
+    if (this->tempBuf != NULL)
+        free(this->tempBuf);
+    free(this);
 }
 
 
@@ -329,11 +332,12 @@ FilterInterface lz4CompressInterface = (FilterInterface) {
  * Create a filter for writing and reading compressed files.
  * @param recordSize - size of individually compressed records.
  */
-Filter *lz4CompressNew(size_t recordSize, Filter *next)
+Lz4Compress *lz4CompressNew(size_t recordSize, Filter *next)
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){.recordSize = recordSize};
-    return filterInit(this, &lz4CompressInterface, next);
+    filterInit(this, &lz4CompressInterface, next);
+    return this;
 }
 
 

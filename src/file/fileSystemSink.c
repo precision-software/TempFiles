@@ -29,8 +29,11 @@ static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered
 /**
  * Open a Posix file.
  */
-Filter *fileSystemOpen(FileSystemSink *this, char *path, int oflags, int perm, Error *error)
+Filter *fileSystemOpen(FileSystemSink *sink, char *path, int oflags, int perm, Error *error)
 {
+    /* Clone ourself. */
+    FileSystemSink *this = fileSystemSinkNew(sink->blockSize);
+
     /* Check the oflags we are opening the file in. TODO: move checks to fileSource. */
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
@@ -43,7 +46,7 @@ Filter *fileSystemOpen(FileSystemSink *this, char *path, int oflags, int perm, E
     /* Open the file and check for errors. */
     this->fd = sys_open(path, oflags, perm, error);
 
-    return fileSystemSinkNew(this->blockSize);
+    return (Filter *)this;
 }
 
 
@@ -86,8 +89,6 @@ void fileSystemClose(FileSystemSink *this, Error *error)
 {
     /* Close the fd if it was opened earlier. */
     sys_close(this->fd, error);
-    this->fd = -1;
-
     free(this);
 }
 
@@ -110,12 +111,12 @@ void fileSystemSync(FileSystemSink *this, Error *error)
 /**
  * Negotiate the block size for reading and writing.
  * Since we are not supporting O_DIRECT yet, we simply
- * agree with whatever block size our caller wants.
+ * return 1 indicating we can deal with any size.
  */
 size_t fileSystemBlockSize(FileSystemSink *this, size_t prevSize, Error *error)
 {
     this->blockSize = prevSize;
-    return prevSize;
+    return 1;
 }
 
 
@@ -151,7 +152,7 @@ FilterInterface fileSystemInterface = (FilterInterface)
 /**
  * Create a new Posix file system Sink.
  */
-Filter *fileSystemSinkNew(size_t blockSize)
+FileSystemSink *fileSystemSinkNew(size_t blockSize)
 {
     /* Default block size, OK for streaming, should match file system block size for blocks. */
     if (blockSize == 0)
@@ -166,5 +167,5 @@ Filter *fileSystemSinkNew(size_t blockSize)
             .iface=&fileSystemInterface,
             .next=NULL}
     };
-    return (Filter *)this;
+    return this;
 }

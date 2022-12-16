@@ -11,31 +11,40 @@
 
 struct FileSource {
     Filter filter;
-    size_t blockSize;
+    bool open;
 };
 
 /**
  * Open a file, returning error information.
  */
-FileSource *fileOpen(FileSource *this, char *path, int oflags, int perm, Error *error)
+FileSource *fileOpen(FileSource *pipe, char *path, int oflags, int perm, Error *error)
 {
-    /* Appending to a file is tricky for encrypted/compressed files. */
+    /* We can't open a pipeline if it is alread open */
+    if (pipe->open)
+        return (void *)filterError(error, "Can't open a file which is already open");
+
+    /* Appending to a file is tricky for encrypted/compressed files. TODO: let following filters decide O_APPEND */
     bool append = (oflags & O_APPEND) != 0;
     oflags &= (~O_APPEND);
 
-    /* Open the file */
-    Filter *next = passThroughOpen(this, path, oflags, perm, error);
+    /* Open the downstream file */
+    Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
+
+    /* clone the current filter, pointing to the downstream clone */
     FileSource *new = fileSourceNew(next);
 
-    /* Negotiate record sizes */
+    /* Make note we are open */
+    new->open = true;
+
+    /* Negotiate record sizes. We don't place any constraints on record size. */
     if (errorIsOK(*error))
-        passThroughBlockSize(new, this->blockSize, error);
+        passThroughBlockSize(new, 1, error);
 
     /* If we are appending, then seek to the end. */
     if (append)
         fileSeek(new, FILE_END_POSITION, error);
 
-    ;
+    return new;
 }
 
 /**
@@ -73,6 +82,8 @@ void fileClose(FileSource *this, Error *error)
     if (errorIsEOF(*error))
         *error = errorOK;
     passThroughClose(this, error);
+
+    /* fclose() does this, but it is dangerous to leave a dangling pointer in our caller */
     free(this);
 }
 
@@ -82,12 +93,12 @@ void fileClose(FileSource *this, Error *error)
  * first element in a pipeline of filters, it is the handle for the entire pipeline.
  */
 FileSource *
-fileSourceNew(Filter *next)
+fileSourceNew(void *next)
 {
     FileSource *this = malloc(sizeof(FileSource));
     filterInit(this, &passThroughInterface, next);
 
-    this->blockSize = 1;   /* We do not conform to record boundaries. */
+    this->open = false;
 
     return this;
 }
