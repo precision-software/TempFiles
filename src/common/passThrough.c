@@ -38,7 +38,7 @@ size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *err
 }
 
 /**
- * Helper to repeatedly read from the next filter in the pipeline until small amount of data left to read, eof, or error.
+ * Helper to repeatedly read from the next filter in the pipeline until small amount of data left to read, nextEOF, or error.
  * Our buffer must be prepared to read at least *maxReadPosition* bytes, so we stop when the remaining buffer is too small to hold them.
  */
 size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
@@ -51,7 +51,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
     /* Repeat until all the bytes are read (or EOF) */
     while (size > 0 && errorIsOK(*error))
     {
-        /* Issue the next read, exiting on error or eof. Note size must be >= this->maxReadPosition. */
+        /* Issue the next read, exiting on error or nextEOF. Note size must be >= this->maxReadPosition. */
         size_t actualSize = passThroughRead(this, buf, size, error);
 
         /* Update the bytes transferred so far. */
@@ -60,7 +60,7 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
         totalSize += actualSize;
     }
 
-    /* If last read had eof, but we were able to read some data, then all is OK. We'll get another eof next read. */
+    /* If last read had nextEOF, but we were able to read some data, then all is OK. We'll get another nextEOF next read. */
     if (errorIsEOF(*error) && totalSize > 0)
         *error = errorOK;
 
@@ -84,7 +84,7 @@ size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
     /* Read the rest of the record */
     size_t actual = passThroughReadAll(this, record, recordSize, error);
 
-    /* Done. actual will match recordSize, unless there was an error. */
+    /* Done. actual will match encryptedSize, unless there was an error. */
     return actual;
 }
 

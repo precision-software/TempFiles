@@ -17,7 +17,7 @@ struct FileSystemSink {
     int fd;          /* The file descriptor for the currrently open file. */
     bool writable;   /* Can we write to the file? */
     bool readable;   /* Can we read from the file? */
-    bool eof;        /* Has the currently open file read past eof? */
+    bool eof;        /* Has the currently open file read past nextEOF? */
     size_t blockSize; /* The recommended size for I/O. BufferedFile will attempt to align */
 };
 
