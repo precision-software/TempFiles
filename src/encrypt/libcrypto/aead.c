@@ -100,6 +100,8 @@ Error aeadFilterOpen(AeadFilter *this, char *path, int oflags, int mode)
     this->maxWritePosition = 0;
     this->fileSize = (oflags & O_TRUNC)? 0 : FILE_END_POSITION;
     this->position = 0;
+    this->buf = NULL;
+    this->tempBuf = NULL;
 
     return error;
 }
@@ -311,7 +313,7 @@ size_t aeadFilterBlockSize(AeadFilter *this, size_t prevSize, Error *error)
 
     /* Allocate a buffer to hold a block of encrypted data. */
     this->buf = malloc(this->recordSize);  /* TODO: memory mgmt */
-    this->buf = malloc(this->plainRecordSize);
+    this->tempBuf = malloc(this->plainRecordSize);
 
     /* Tell the previous stage they must accommodate our plaintext block size. */
     return this->plainRecordSize;

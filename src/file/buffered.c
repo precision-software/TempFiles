@@ -277,8 +277,8 @@ void blockifyClose(Blockify *this, Error *error)
     passThroughClose(this, error);
 
     this->readable = this->writeable = false;
-    if (this->buf != NULL)
-        free(this->buf);
+    //if (this->buf != NULL)
+    //    free(this->buf);
 }
 
 
