@@ -138,6 +138,7 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 
     /* Copy data in and update position */
     size_t actual = copyIn(this, buf, size);
+    this->dirty = true;
     this->position += actual;
     this->dirty = true;
 
