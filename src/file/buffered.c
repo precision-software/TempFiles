@@ -75,6 +75,10 @@ Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
     this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
 
+    /* Below us, we need to read/modify/write even if write only. */
+    if ( (oflags & O_ACCMODE) == O_WRONLY)
+        oflags = (oflags & ~O_ACCMODE) | O_RDWR;
+
     /* Position to the start of file */
     this->position = 0;
     this->blockPosition = 0;
@@ -129,7 +133,7 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
     }
 
     /* If we are dirtying a clean buffer, then seek backwards to the start of buffer */
-    if (this->blockActual > 0 && !this->dirty)
+    if (!this->dirty)
         passThroughSeek(this, this->blockPosition, error);
 
     /* Copy data in and update position */

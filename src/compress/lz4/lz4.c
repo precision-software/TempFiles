@@ -197,9 +197,6 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
     /* Seek to corresponding record */
     passThroughSeek(this, this->compressedPosition, error);
 
-    /* To keep index and data in sync, this is like a write */
-    this->previousRead = false;
-
     return position;
 }
 
