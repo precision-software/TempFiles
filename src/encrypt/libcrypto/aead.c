@@ -85,21 +85,22 @@ struct AeadFilter
  * @param mode - if creating a file, the permissions.
  * @return - Error status.
  */
-Filter *aeadFilterOpen(AeadFilter *pipe, char *path, int oflags, int mode, Error *error)
+AeadFilter *aeadFilterOpen(AeadFilter *pipe, char *path, int oflags, int mode, Error *error)
 {
-    /* We do NOT support append mode directly. Use Buffering if O_APPEND is needed. */
-    if ((oflags & O_APPEND) != 0)
-        return (filterError(error, "Can't directly append to encrypted file - use buffering"), NULL);
-
     /* We need to read header, even if otherwise write only */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
         oflags = (oflags & ~O_ACCMODE) | O_RDWR;
 
-    /* Go ahead and open the downstream file. */
+    /* Open the downstream file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
-
-    /* Clone ourselves, attaching to the downstream clone */
     AeadFilter *this = aeadFilterNew(pipe->cipherName, pipe->plainSize, pipe->key, pipe->keySize, next);
+    if (isError(*error))
+        return this;
+
+    /* We do NOT support append mode directly. Use Buffering if O_APPEND is needed. */
+    if ((oflags & O_APPEND) != 0)
+        return (filterError(error, "Can't directly append to encrypted file - use buffering"), this);
+
 
     /* Is the file readable/writable? */
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
@@ -114,7 +115,7 @@ Filter *aeadFilterOpen(AeadFilter *pipe, char *path, int oflags, int mode, Error
     this->cipherBuf = NULL;
     this->plainBuf = NULL;
 
-    return (Filter *)this;
+    return this;
 }
 
 

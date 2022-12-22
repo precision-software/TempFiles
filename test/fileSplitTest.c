@@ -1,13 +1,14 @@
 /*  */
 #include <stdio.h>
 #include <sys/fcntl.h>
-#include "file/byteStream.h"
+#include "file/buffered.h"
 #include "file/fileSystemSink.h"
 #include "compress/lz4/lz4.h"
 #include "file/fileSource.h"
 #include "fileSplit/fileSplit.h"
 
-#include "framework/streamFramework.h"
+#include "framework/fileFramework.h"
+#include "framework/unitTest.h"
 
 
 void testMain()
@@ -17,9 +18,9 @@ void testMain()
     beginTestGroup("File Splitting");
     FileSource *split =
             fileSourceNew(
-                    bufferStreamNew(
-                            fileSplitFilterNew(1024 * 1024,formatPath, "%s-%06d.seg",
-                                               fileSystemSinkNew(0))));
+                    blockifyNew(1024,
+                            fileSplitFilterNew(1024 * 1024, formatPath, "%s-%06d.seg",
+                                               fileSystemSinkNew(1))));
     streamTest(split, TEST_DIR "split/testfile_%u_%u");
 
     //splitVerify("Split into multiple files: verify files");

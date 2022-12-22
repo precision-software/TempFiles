@@ -41,12 +41,15 @@ struct Lz4Compress
 };
 
 
-Filter *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Error *error)
+Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Error *error)
 {
     debug("lz4Open: path=%s  oflags=0x%x\n", path, oflags);
+
     /* Open the compressed file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
     Lz4Compress *this = lz4CompressNew(pipe->recordSize, next);
+    if (isError(*error))
+        return this;
 
     /* Open the index file as well. */
     /*   FileSource is a dummy wrapper to support "fileRead" and "fileWrite" type functions */
@@ -62,7 +65,7 @@ Filter *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Err
     /* Do we want to write a file header containing the record size? */
     /* TODO: later. */
 
-    return (Filter *)this;
+    return this;
 }
 
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)

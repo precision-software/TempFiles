@@ -19,9 +19,6 @@ struct FileSource {
  */
 FileSource *fileOpen(FileSource *pipe, char *path, int oflags, int perm, Error *error)
 {
-    /* We can't open a pipeline if it is alread open */
-    if (pipe->open)
-        return (void *)filterError(error, "Can't open a file which is already open");
 
     /* Appending to a file is tricky for encrypted/compressed files. TODO: let following filters decide O_APPEND */
     bool append = (oflags & O_APPEND) != 0;

@@ -69,17 +69,17 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
 /**
  * Open a buffered file, reading, writing or both.
  */
-Filter *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *error)
+Blockify *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *error)
 {
     /* Below us, we need to read/modify/write even if write only. */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
         oflags = (oflags & ~O_ACCMODE) | O_RDWR;
 
-    /* Pass the open event to the next filter to actually open the file. */
+    /* Open the downstream file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
-
-    /* Clone ourselves, attaching to the clone of our successor */
     Blockify *this = blockifyNew(pipe->suggestedSize, next);
+    if (isError(*error))
+        return this;
 
     /* Are we read/writing or both? */
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
@@ -100,7 +100,7 @@ Filter *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *er
     /* We don't know record size yet, so we will allocate buffer in the Size event */
     this->buf = NULL;
 
-    return (Filter*)this;
+    return this;
 }
 
 

@@ -13,14 +13,14 @@
  *  names of 64MB temporary data segments.
  *      splitter = fileSplitFilterNew(64*1024*1024, formatPath, "/tmp/postgres/%s-%d.dat", next)
  *  The segments would be named  /tmp/postgres/NAME-0.dat, /tmp/postgres/NAME-1.dat and so on.
- *
- *  Note Seek() is not yet supported.
  */
+#include <stdlib.h>
 #include "common/passThrough.h"
-#include "fileSplit.h"
+#include "fileSplit/fileSplit.h"
+#include "file/fileSource.h"
 
 /* Structure defining the state for read/writing a group of split files */
-typedef struct FileSplitFilter
+struct FileSplitFilter
 {
     Filter filter;      /* Common to all "filters" */
     size_t segmentSize; /* Number of bytes each segment will hold, except last. */
@@ -28,14 +28,16 @@ typedef struct FileSplitFilter
     void *pathData;     /* Object pased to the getPath function */
     size_t position;    /* Current position within the group of files. */
     char name[PATH_MAX];  /* Name of the overall file set, used to calculate segment names. */
-    int mode;           /* The mode we open each segment in. */
-    int perm;           /* If creating files, use this permission. */
-} FileSplitFilter;
+    int oflags;           /* The mode we open each segment in. */
+    int perm;             /* If creating files, use this permission. */
+    FileSource   *file;   /* points to the current open file segment, null otherwise */
+};
 
 static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
 
 static void closeCurrentSegment(FileSplitFilter *this, Error *error);
 static void openCurrentSegment(FileSplitFilter *this, Error *error);
+pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error);
 
 /**
  * Open a set of split files. These are a group of files which, when appended
@@ -46,21 +48,30 @@ static void openCurrentSegment(FileSplitFilter *this, Error *error);
  * @param perm - If creating a file, the Posix style permissions of the new file.
  * @return     - Error code indicating "OK" or error.
  */
-Error fileSplitOpen(FileSplitFilter *this, char *name, int mode, int perm)
+FileSplitFilter *fileSplitOpen(FileSplitFilter *pipeline, char *name, int oflags, int perm, Error *error)
 {
+    /* Clone the following pipeline. A forced error will simply clone the pipeline and not open it. */
+    Error ignoreError = errorEOF;
+    Filter *clone = passThroughOpen(pipeline, "", oflags, perm, &ignoreError);
+
+    /* Clone ourselves */
+    FileSplitFilter *this = fileSplitFilterNew(pipeline->segmentSize, pipeline->getPath, pipeline->pathData, clone);
+    if (isError(*error))
+        return this;
+
     /* Save the open parameters since we will use them when opening each segment. */
-    this->mode = mode;
+    this->oflags = oflags;
     this->perm = perm;
     if (strlen(name) >= sizeof(this->name))
-        return errorPathTooLong;
+        return (filterError(error, "fileSplitOpen: path name too long"), this);
     strcpy(this->name, name);
 
     /* Position at the beginning of the first segment, creating it if writing. */
     this->position = 0;
-    Error error = errorOK;
-    openCurrentSegment(this, &error);
+    this->file = NULL;
+    openCurrentSegment(this, error);
 
-    return error;
+    return this;
 }
 
 /**
@@ -70,12 +81,12 @@ size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error
 {
     if (isError(*error)) return 0;
 
-    /* If crossing segment boundary, then truncate to the end of segment. */
+    /* If crossing segment boundary, truncate to the end of segment. */
     size_t start = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
     /* Read the possibly truncated buffer. */
-    size_t actual = passThroughRead(this, buf, truncSize, error);
+    size_t actual = fileRead(this->file, buf, truncSize, error);
     this->position += actual;
 
     /* If we just finished reading an entire segment, advance to the next segment. */
@@ -86,6 +97,48 @@ size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error
     return actual;
 }
 
+pos_t fileSplitSeek(FileSplitFilter *this, pos_t position, Error *error)
+{
+    /* Special case for seeking to end */
+    if (position == FILE_END_POSITION)
+        return fileSplitSeekEnd(this, error);
+
+    pos_t oldPosition =  this->position;
+    this->position = position;
+
+    if (sizeRoundDown(position, this->segmentSize) != sizeRoundDown(oldPosition, this->segmentSize))
+        openCurrentSegment(this, error);
+
+    pos_t offset = position % this->segmentSize;
+    fileSeek(this->file, offset, error);
+
+    return position;
+}
+
+pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error)
+{
+    /* Scan looking for last (partial) segment */
+    /* TODO: make it a binary search instead of linear */
+    size_t segmentCount;
+    size_t segmentSize;
+
+    /* Scan through the segments */
+    for (segmentCount = 0; ; segmentCount++)
+    {
+        /* Get the size of the next segment */
+        this->position = segmentCount * this->segmentSize;
+        openCurrentSegment(this, error);
+        segmentSize = fileSeek(this->file, FILE_END_POSITION, error);
+
+        /* Done when we find a partial segment */
+        if (segmentSize != this->segmentSize)
+            break;
+    }
+
+    return segmentCount * this->segmentSize + segmentSize;
+
+}
+
 /**
  * Write to a group of split files, creating new segments if appropriate.
  */
@@ -94,16 +147,16 @@ size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *erro
     if (isError(*error)) return 0;
 
     /* If crossing segment boundary, then truncate to the end of segment. */
-    size_t start = this->position % this->segmentSize;
-    size_t truncSize = sizeMin( this->segmentSize - start, size);
+    size_t offset = this->position % this->segmentSize;
+    size_t truncSize = sizeMin( this->segmentSize - offset, size);
 
     /* Write the possibly truncated buffer. */
-    size_t actual = passThroughWrite(this, buf, truncSize, error);
+    size_t actual = fileWrite(this->file, buf, truncSize, error);
     this->position += actual;
 
     /* If we have filled the current segment, then open up the next segment. */
     /*  Note we must always end the sequence with a partial segment, even if it is zero length. */
-    if (start + actual == this->segmentSize)
+    if (offset + actual == this->segmentSize)
         openCurrentSegment(this, error);
 
     return actual;
@@ -115,6 +168,8 @@ size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *erro
 void fileSplitClose(FileSplitFilter *this, Error *error)
 {
     closeCurrentSegment(this, error);
+    passThroughClose(this, error);
+    free(this);
 }
 
 /**
@@ -122,19 +177,19 @@ void fileSplitClose(FileSplitFilter *this, Error *error)
  */
 static void closeCurrentSegment(FileSplitFilter *this, Error *error)
 {
-    passThroughClose(this, error);
+    if (this->file != NULL)
+        fileClose(this->file, error);
+    this->file = NULL;
 }
 
 
 /**
  * Open the segment corresponding to this->position.
  */
-static void openCurrentSegment(FileSplitFilter *this, Error *error)
+void openCurrentSegment(FileSplitFilter *this, Error *error)
 {
-    /* Start by closing the current segment, of it was opened. */
+    /* Close the current segment if opened */
     closeCurrentSegment(this, error);
-    if (isError(*error))
-        return;
 
     /* Generate the path to the new file segment. */
     size_t segmentIdx = this->position / this->segmentSize;
@@ -142,18 +197,22 @@ static void openCurrentSegment(FileSplitFilter *this, Error *error)
     this->getPath(this->pathData, this->name, segmentIdx, path);
 
     /* Open the new file segment. */
-    /* Note if we exit now, the last file will be zero length, which will be read back as an EOF. */
-    *error = passThroughOpen(this, path, this->mode, this->perm);
+    this->file = fileSourceNew(passThroughOpen(this, path, this->oflags, this->perm, error));
 }
 
 /**
- * We don't transform data, so we just fit in with the block sizes of our neighbors.
+ * We don't transform data, so we just agree with the block sizes of our neighbors.
  */
-size_t fileSplitSize(FileSplitFilter *this, size_t writeSize)
+size_t fileSplitBlockSize(FileSplitFilter *this, size_t recordSize, Error *error)
 {
-    this->filter.writeSize = writeSize;
-    this->filter.readSize = passThroughSize(this, writeSize);
-    return this->filter.readSize;
+    /* Pass through the size request */
+    size_t nextSize = passThroughBlockSize(this, recordSize, error);
+
+    /* Our only constraint is the segment must contain an even number of records */
+    if (this->segmentSize % nextSize != 0)
+        return filterError(error, "File split size must contain even number of records");
+
+    return nextSize;
 }
 
 static FilterInterface fileSplitInterface = {
@@ -161,7 +220,8 @@ static FilterInterface fileSplitInterface = {
     .fnOpen = (FilterOpen)fileSplitOpen,
     .fnRead = (FilterRead)fileSplitRead,
     .fnWrite = (FilterWrite)fileSplitWrite,
-    .fnSize = (FilterSize)fileSplitSize
+    .fnSeek = (FilterSeek)fileSplitSeek,
+    .fnBlockSize = (FilterBlockSize)fileSplitBlockSize
 };
 
 /**
@@ -172,7 +232,7 @@ static FilterInterface fileSplitInterface = {
  * @param next - pointer to the next filter in the sequence.
  * @return - a constructed filter for segmenting files.
  */
-Filter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, Filter *next)
+FileSplitFilter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, void *next)
 {
     FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
     *this = (FileSplitFilter) {
