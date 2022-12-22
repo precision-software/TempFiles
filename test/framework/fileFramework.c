@@ -49,7 +49,8 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
  */
 void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
-    Error error = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     Byte *buf = malloc(bufferSize);
 
     size_t position;
@@ -57,37 +58,38 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
     {
         size_t expected = sizeMin(bufferSize, fileSize-position);
         generateBuffer(position, buf, expected);
-        size_t actual = fileWrite(pipe, buf, expected, &error);
+        size_t actual = fileWrite(file, buf, expected, &error);
         PG_ASSERT_OK(error);
         PG_ASSERT_EQ(actual, expected);
     }
 
     free(buf);
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     PG_ASSERT_OK(error);
 }
 
 /* Verify a file has the correct data */
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
-    Error error = fileOpen(pipe, path, O_RDONLY, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
 
     for (size_t actual, position = 0; position < fileSize; position += actual)
     {
         size_t expected = sizeMin(bufferSize, fileSize-position);
-        actual = fileRead(pipe, buf, bufferSize, &error);
+        actual = fileRead(file, buf, bufferSize, &error);
         PG_ASSERT_OK(error);
         PG_ASSERT_EQ(expected, actual);
         PG_ASSERT(verifyBuffer(position, buf, actual));
     }
 
     // Read a final EOF.
-    fileRead(pipe, buf, bufferSize, &error);
+    fileRead(file, buf, bufferSize, &error);
     PG_ASSERT_EOF(error);
 
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     PG_ASSERT_OK(error);
 }
 
@@ -101,7 +103,8 @@ void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
 void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     /* Start out by allocating space and filling the file with "X"s. */
-    Error error = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
     memset(buf, 'X', bufferSize);
@@ -110,12 +113,12 @@ void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
     for (position = 0; position < fileSize; position += bufferSize)
     {
         size_t expected = sizeMin(bufferSize, fileSize-position);
-        size_t actual = fileWrite(pipe, buf, expected, &error);
+        size_t actual = fileWrite(file, buf, expected, &error);
         PG_ASSERT_OK(error);
         PG_ASSERT_EQ(actual, expected);
     }
 
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     free(buf);
 
     PG_ASSERT_OK(error);
@@ -129,7 +132,8 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     size_t nrBlocks = (fileSize + blockSize - 1) / blockSize;
     PG_ASSERT( nrBlocks == 0 || (nrBlocks % prime) != 0);
 
-    Error error = fileOpen(pipe, path, O_RDWR, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -139,7 +143,7 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
         /* Pick a pseudo-random block and seek to it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
         //printf("fileSeek - idx = %u  recordNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
-        fileSeek(pipe, position, &error);
+        fileSeek(file, position, &error);
         PG_ASSERT_OK(error);
 
         /* Generate data appropriate for that block. */
@@ -147,23 +151,24 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
         generateBuffer(position, buf, expected);
 
         /* Write the block */
-        size_t actual = fileWrite(pipe, buf, expected, &error);
+        size_t actual = fileWrite(file, buf, expected, &error);
         PG_ASSERT_OK(error);
         PG_ASSERT_EQ(actual, expected);
     }
 
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     PG_ASSERT_OK(error);
 }
 
 void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
 {
-    Error error = fileOpen(pipe, path, O_RDWR, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
-    /* Seek to the end of the file */
-    pos_t endPosition = fileSeek(pipe, FILE_END_POSITION, &error);
+    /* Seek to the end of the file - should match file size */
+    pos_t endPosition = fileSeek(file, FILE_END_POSITION, &error);
     PG_ASSERT_OK(error);
     PG_ASSERT_EQ(fileSize, endPosition);
 
@@ -171,12 +176,12 @@ void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
     generateBuffer(endPosition, buf, blockSize);
 
     /* Write the block */
-    size_t actual = fileWrite(pipe, buf, blockSize, &error);
+    size_t actual = fileWrite(file, buf, blockSize, &error);
     PG_ASSERT_OK(error);
     PG_ASSERT_EQ(actual, blockSize);
 
     /* Close the file and verify it is correct. */
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     PG_ASSERT_OK(error);
 
     verifyFile(pipe, path, fileSize+blockSize, blockSize);
@@ -188,7 +193,8 @@ void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
  */
 void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
 {
-    Error error = fileOpen(pipe, path, O_RDONLY, 0);
+    Error error = errorOK;
+    FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -198,9 +204,9 @@ void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bloc
     {
         /* Pick a pseudo-random block and read it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
-        fileSeek(pipe, position, &error);
+        fileSeek(file, position, &error);
         PG_ASSERT_OK(error);
-        size_t actual = fileRead(pipe, buf, blockSize, &error);
+        size_t actual = fileRead(file, buf, blockSize, &error);
         PG_ASSERT_OK(error);
 
         /* Verify we read the correct data */
@@ -209,7 +215,7 @@ void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bloc
         PG_ASSERT(verifyBuffer(position, buf, actual));
     }
 
-    fileClose(pipe, &error);
+    fileClose(file, &error);
     PG_ASSERT_OK(error);
 }
 
@@ -221,7 +227,7 @@ void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t buf
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
     beginTest(fileName);
 
-    /* create and read back as a stream I/
+    /* create and read back as a stream */
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
 

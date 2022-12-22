@@ -8,6 +8,6 @@
 #include "common/filter.h"
 
 typedef struct FileSystemSink FileSystemSink;
-Filter *fileSystemSinkNew(size_t blockSize);
+FileSystemSink *fileSystemSinkNew(size_t blockSize);
 
 #endif /*UNTITLED1_FILESYSTEMSINK_H */

@@ -11,9 +11,9 @@
 
 typedef struct FileSource FileSource;
 
-FileSource *fileSourceNew(Filter *filter);
+FileSource *fileSourceNew(void *next);
 
-Error fileOpen(FileSource *this, char *path, int oflags, int perm);
+FileSource *fileOpen(FileSource *this, char *path, int oflags, int perm, Error *error);
 size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 void fileClose(FileSource *this, Error *error);

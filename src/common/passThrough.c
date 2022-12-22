@@ -12,7 +12,7 @@ static Error notInSink =
 
 
 /**
- * Helper to repeatedly write to the next filter in the pipeline until all the data is written (or error).
+ * Helper to repeatedly write to the file pipeline until all the data is written (or error).
  */
 size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *error)
 {
@@ -75,18 +75,14 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
 {
     /* Read the record length  TODO: create passThroughGet4(..) */
-    size_t actual = passThroughReadAll(this, record, 4, error);
+    size_t recordSize = passThroughGet4(this, error);
     if (isError(*error))
         return 0;
-
-    /* Unpack it and do a sanity check */
-    Byte *bp = record;
-    size_t recordSize = unpack4(&bp, record+size);
     if (recordSize > size)
         return filterError(error, "Record length is too large");
 
     /* Read the rest of the record */
-    actual = passThroughReadAll(this, record, recordSize, error);
+    size_t actual = passThroughReadAll(this, record, recordSize, error);
 
     /* Done. actual will match recordSize, unless there was an error. */
     return actual;
@@ -98,10 +94,7 @@ size_t passThroughWriteSized(void *this, Byte *record, size_t size, Error *error
         return 0;
 
     /* Write out the 32-bit size in network byte order (big endian) */
-    Byte sizeBuf[4];
-    Byte *bp = sizeBuf;
-    pack4(&bp, bp+4, size);
-    passThroughWriteAll(this, sizeBuf, 4, error);
+    passThroughPut4(this, size, error);
 
     /* Write out the record */
     return passThroughWriteAll(this, record, size, error);
@@ -136,4 +129,21 @@ size_t passThroughGet8(void *this, Error *error)
     passThroughReadAll(this, buf, 8, error);
 
     return unpack8(&bp, buf+8);
+}
+
+
+bool passThroughPut4(void *this, size_t value, Error *error)
+{
+    Byte buf[4]; Byte *bp = buf;
+    pack4(&bp, bp + 4, value);
+    passThroughWriteAll(this, buf, 4, error);
+    return bp > bp + 4;
+}
+
+size_t passThroughGet4(void *this, Error *error)
+{
+    Byte buf[4]; Byte *bp = buf;
+    passThroughReadAll(this, buf, 4, error);
+
+    return unpack4(&bp, buf+4);
 }

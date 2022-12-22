@@ -6,36 +6,18 @@ include_directories(src /opt/local/include test)
 link_directories(/opt/local/lib /opt/homebrew/Cellar/openssl@1.1/1.1.1s/lib)
 
 add_executable(rawTest test/rawTest.c
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
         src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h)
 
-add_executable(rawSeekTest test/rawSeekTest.c
-        test/framework/unitTestInternal.h test/framework/unitTest.h
-        test/framework/fileFramework.c test/framework/fileFramework.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h
-        src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h)
 
 
 add_executable(blockifyTest test/blockifyTest.c
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h
-        src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h
-        src/file/buffered.c src/file/buffered.h)
-
-add_executable(seekTest test/seekTest.c
         src/file/buffered.c src/file/buffered.h
-        test/framework/unitTestInternal.h test/framework/unitTest.h
-        test/framework/fileFramework.c test/framework/fileFramework.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h
@@ -45,7 +27,7 @@ add_executable(seekTest test/seekTest.c
 
 add_executable(aeadTest test/aeadTest.c
         src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
-        test/framework/unitTestInternal.h test/framework/streamFramework.c test/framework/streamFramework.h test/framework/unitTest.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
         src/common/passThrough.c src/common/passThrough.h
         src/file/fileSystemSink.c src/file/fileSystemSink.h

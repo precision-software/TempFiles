@@ -6,6 +6,6 @@
 #include "common/filter.h"
 
 typedef struct AeadFilter AeadFilter;
-Filter *aeadFilterNew(char *cipherName, size_t recordSize, Byte *key, size_t keyLen, Filter *next);
+AeadFilter *aeadFilterNew(char *cipherName, size_t recordSize, Byte *key, size_t keyLen, void *next);
 
 #endif //FILTER_AEAD_H

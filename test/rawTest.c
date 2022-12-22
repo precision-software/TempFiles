@@ -7,16 +7,16 @@
 #include "file/fileSource.h"
 #include "file/fileSystemSink.h"
 
-#include "framework/streamFramework.h"
-
+#include "framework/fileFramework.h"
+#include "framework/unitTest.h"
 
 void testMain()
 {
-    system("rm -rf " TEST_DIR "buffered; mkdir -p " TEST_DIR "buffered");
+    system("rm -rf " TEST_DIR "raw; mkdir -p " TEST_DIR "raw");
 
-    beginTestGroup("Buffered Files");
-    FileSource *stream = fileSourceNew(fileSystemSinkNew(4096));
-    streamTest(stream, TEST_DIR "buffered/testfile_%u_%u.dat");
+    beginTestGroup("Raw Files");
+    FileSource *stream = fileSourceNew(fileSystemSinkNew(1));
+    seekTest(stream, TEST_DIR "raw/testfile_%u_%u.dat");
 
     // open/close/read/write errors.
 

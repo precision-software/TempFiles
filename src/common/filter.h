@@ -10,26 +10,39 @@
  * the event passes down the pipeline until some other filter can process it.
  * (Note that events are implemented as simple procedure calls.)
  *
- * Data flows between filters in fixed size "blocks", where a block is a
- * chunk of data which fits in memory. A filter transforms data blocks,
- * changing either the content or the size of the block. Since sizes can change,
- * block size information is
- * communicated throughout the pipeline with the "BlockSize" event,
- * allowing each filter to state its size requirements and to know its neighbor's block size.
+ * Data flows between filters in fixed size "records", where a record is a
+ * chunk of data which fits in memory. A filter transforms records,
+ * changing either the content or the size of the records. Since sizes can change,
+ * record size information is negotiated
+ * throughout the pipeline with the "BlockSize" event,
+ * allowing each filter to state its size requirements and to know its neighbor's record size.
  *
- * Block sizes between stages do not always match. It is always acceptable for a predecessor's block
- * size to be a multiple of a successor's block size. If block sizes are otherwise incompatible, it
- * is possible to insert a "buffer" filter into the stream which buffers data into the appropriate
- * block size.
+ * Record sizes between stages do not always match. It is always acceptable for a predecessor's record
+ * size to be a multiple of a successor's successors size. If record sizes are otherwise incompatible, it
+ * is possible to insert a "buffered" filter into the stream which buffers data into the appropriate
+ * record size.
  *
- * The resulting output file consists of a sequence of equally sized blocks, possibly followed by
- * a final, partial block. Some filters (including compression) may produce variable sized blocks;
- * those filters need to maintain the appearance of fixed size blocks, even though the resulting
+ * The resulting output file consists of a sequence of equally sized records, possibly followed by
+ * a final, partial record. Some filters (including compression) may produce variable sized records;
+ * those filters need to maintain the appearance of fixed size records, even though the resulting
  * output is not actually fixed size.
+ *
+ * The "Seek" event allows positioning to a random record. If seeking to FILE_END_POSITION,
+ * the event will position to
+ *    1) The beginning of the final partial record, or
+ *    2) if no partial records, the actial EOF,
+ *    3) In some cases, the beginning of the final record, even if full.
+ *
+ * Condition 3) occurs because, without examining the last record, it may not
+ * be possible to determine if it partial or full.  (For example, encryption with padding.)
+ * (Consider resolving condition 3) in the filter itself, so 1) and 2) always apply.)
+ *
+ * When the record size is 1 byte, a seek to FILE_END_POSITION will always point to EOF
+ * and return the number of bytes stored in the file.
  */
 
-#ifndef UNTITLED1_FILTER_H
-#define UNTITLED1_FILTER_H
+#ifndef COMMON_FILTER_H
+#define COMMON_FILTER_H
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -69,7 +82,7 @@ typedef struct Filter {
 /***********************************************************************************************************************************
 A set of functions a filter provides, one for each type of event.
 ***********************************************************************************************************************************/
-typedef Error (*FilterOpen)(void *this, char *path, int mode, int perm);
+typedef Filter *(*FilterOpen)(void *this, char *path, int mode, int perm, Error *error);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
@@ -91,7 +104,7 @@ typedef struct FilterInterface {
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */
-Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next);
+void *filterInit(void *thisVoid, FilterInterface *iface, void *next);
 
 /* Some possibly helpful stubs. */
 void badSeek(Filter *this, size_t position, Error *error);
@@ -106,4 +119,4 @@ inline static size_t sizeRoundUp(size_t size, size_t factor) {return sizeRoundDo
 #endif
 
 
-#endif /*UNTITLED1_FILTER_H */
+#endif /* COMMON_FILTER_H */

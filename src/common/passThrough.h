@@ -8,13 +8,13 @@
  * each event, so we can dispatch directly and don't have to scan the pipeline
  * looking for an appropriate filter.  (See filter.h)
  */
-#ifndef UNTITLED1_PASSTHROUGH_H
-#define UNTITLED1_PASSTHROUGH_H
-#include "filter.h"
+#ifndef COMMON_PASSTHROUGH_H
+#define COMMON_PASSTHROUGH_H
+#include "common/filter.h"
 
 extern FilterInterface passThroughInterface;
 #define passThrough(Event, this, ...)   ((Filter*)this)->next##Event->iface->fn##Event(((Filter*)this)->next##Event, __VA_ARGS__)
-#define passThroughOpen(this, path, mode, perm) passThrough(Open, this, path, mode, perm)
+#define passThroughOpen(this, path, oflags, mode, error) passThrough(Open, this, path, oflags, mode, error)
 #define passThroughRead(this, buf, size, error) passThrough(Read, this, buf, size, error)
 #define passThroughWrite(this, buf, size, error) passThrough(Write, this, buf, size, error)
 #define passThroughClose(this, error) passThrough(Close, this, error)
@@ -41,4 +41,4 @@ size_t passThroughGet4(void *this, Error *error);
 size_t passThroughGet8(void *this, Error *error);
 
 
-#endif /*UNTITLED1_PASSTHROUGH_H */
+#endif /* COMMON_PASSTHROUGH_H */

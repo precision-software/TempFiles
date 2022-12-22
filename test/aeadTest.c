@@ -7,8 +7,8 @@
 #include "encrypt/libcrypto/aead.h"
 #include "file/fileSource.h"
 
-#include "framework/streamFramework.h"
-
+#include "framework/fileFramework.h"
+#include "framework/unitTest.h"
 
 void testMain()
 {
@@ -19,7 +19,7 @@ void testMain()
         fileSourceNew(
             blockifyNew(1024,
                 aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
-                    fileSystemSinkNew(0))));
+                    fileSystemSinkNew(1))));
 
     //singleStreamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 64, 1024);
     streamTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat");

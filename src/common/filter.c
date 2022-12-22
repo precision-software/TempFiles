@@ -12,7 +12,7 @@
         : this->next)
 
 
-Filter *filterInit(void *thisVoid, FilterInterface *iface, Filter *next)
+void *filterInit(void *thisVoid, FilterInterface *iface, void *next)
 {
     /* Link us up with our successor. */
     Filter *this = thisVoid;

@@ -69,8 +69,14 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
 /**
  * Open a buffered file, reading, writing or both.
  */
-Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
+Filter *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *error)
 {
+    /* Pass the open event to the next filter to actually open the file. */
+    Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
+
+    /* Clone ourselves, attaching to the clone of our successor */
+    Blockify *this = blockifyNew(pipe->suggestedSize, next);
+
     /* Are we read/writing or both? */
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
     this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
@@ -91,10 +97,10 @@ Error blockifyOpen(Blockify *this, char *path, int oflags, int perm)
     this->fileSize = 0;
     this->sizeConfirmed = (oflags & O_TRUNC) == O_TRUNC;
 
-    /* Pass the open event to the next filter to actually open the file. */
-    Error error = passThroughOpen(this, path, oflags, perm);
+    /* We don't know record size yet, so we will allocate buffer in the Size event */
+    this->buf = NULL;
 
-    return error;
+    return (Filter*)this;
 }
 
 
@@ -120,7 +126,7 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
     }
 
     /* If buffer is empty, position is aligned, and the data exceeds block size, write direct to next stage */
-    if (this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
+    if (this->buf == NULL || this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
         return directWrite(this, buf, size, error);
 
     /* If buffer is empty ... */
@@ -186,7 +192,7 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
     }
 
     /* Optimization. See if we skip our buffer and talk directly to the next stage */
-    if (this->position == this->blockPosition && size > this->blockSize && this->blockActual == 0)
+    if (this->buf == NULL || this->position == this->blockPosition && size > this->blockSize && this->blockActual == 0)
         return directRead(this, buf, size, error);
 
         /* If our buffer is empty fill it in.  Exit on error or EOF */
@@ -201,6 +207,8 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
     debug("blockifyRead: actual=%zu\n", actual);
     return actual;
 }
+
+
 size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
     debug("directRead: size=%zu  position=%zu recordSize=%zu\n", size, this->position, this->blockSize);
@@ -230,7 +238,7 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
  */
 size_t blockifySeek(Blockify *this, size_t position, Error *error)
 {
-    debug("blockifySeek: this->position=%zu  position=%zd\n", this->position, (off_t)position);
+    debug("blockifySeek: this->position=%zu  position=%lld\n", this->position, (off_t)position);
     if (isError(*error))
         return this->position;
 
@@ -278,8 +286,10 @@ void blockifyClose(Blockify *this, Error *error)
     passThroughClose(this, error);
 
     this->readable = this->writeable = false;
-    //if (this->buf != NULL)
-    //    free(this->buf);
+    if (this->buf != NULL)
+        free(this->buf);
+    free(this);
+
 }
 
 
@@ -313,8 +323,10 @@ size_t blockifyBlockSize(Blockify *this, size_t prevSize, Error *error)
     /* Our actual size will be a multiple of the requested size */
     this->blockSize = sizeRoundUp(suggestedSize, requestedSize);
 
-    /* Allocate a buffer. */
-    this->buf = palloc(this->blockSize);
+    /* Resize the buffer we created during Open() . */
+    flushBuffer(this, error);
+    this->buf = realloc(this->buf, this->blockSize);
+    this->blockActual = 0;
 
     /* We are buffering, so tell the caller we can accept any size. */
     return 1;
@@ -337,7 +349,7 @@ FilterInterface blockifyInterface = (FilterInterface)
  Create a new buffer filter object.
  It converts input bytes to records expected by the next filter in the pipeline.
  */
-Filter *blockifyNew(size_t suggestedSize, Filter *next)
+Blockify *blockifyNew(size_t suggestedSize, void *next)
 {
     Blockify *this = palloc(sizeof(Blockify));
     *this = (Blockify){0};
