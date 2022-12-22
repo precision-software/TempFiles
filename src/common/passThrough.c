@@ -84,7 +84,7 @@ size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
     /* Read the rest of the record */
     size_t actual = passThroughReadAll(this, record, recordSize, error);
 
-    /* Done. actual will match recordSize, unless there was an error. */
+    /* Done. actual will match cipherSize, unless there was an error. */
     return actual;
 }
 

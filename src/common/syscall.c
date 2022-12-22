@@ -1,6 +1,7 @@
 /**
  * A collection of system call wrappers, packaged to use our error handling objects.
  */
+//#define DEBUG
 #include <unistd.h>
 #include <sys/fcntl.h>
 #include "common/syscall.h"

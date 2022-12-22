@@ -15,7 +15,7 @@
  *    2) All I/Os transfer an entire block, except for the final block in the file.
  *    3) The actual file is pre-positioned for the next I/O.
  *       a) If the buffer is partial or dirty, the actual file position matches blockPosition.
- *       b) If the buffer is full of clean data, the actual file position matches blockPosition+recordSize.
+ *       b) If the buffer is full of clean data, the actual file position matches blockPosition+cipherSize.
  *
  *  One goal is to ensure purely sequential reads/writes do not require Seek operations.
  *
@@ -71,6 +71,10 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
  */
 Filter *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *error)
 {
+    /* Below us, we need to read/modify/write even if write only. */
+    if ( (oflags & O_ACCMODE) == O_WRONLY)
+        oflags = (oflags & ~O_ACCMODE) | O_RDWR;
+
     /* Pass the open event to the next filter to actually open the file. */
     Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
 
@@ -80,10 +84,6 @@ Filter *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *er
     /* Are we read/writing or both? */
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
     this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
-
-    /* Below us, we need to read/modify/write even if write only. */
-    if ( (oflags & O_ACCMODE) == O_WRONLY)
-        oflags = (oflags & ~O_ACCMODE) | O_RDWR;
 
     /* Position to the start of file */
     this->position = 0;
@@ -172,7 +172,7 @@ size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
  */
 size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("blockifyRead: position=%zu size=%zu recordSize=%zu\n", this->position, size, this->blockSize);
+    debug("blockifyRead: position=%zu size=%zu cipherSize=%zu\n", this->position, size, this->blockSize);
     if (!errorIsOK(*error))
         return 0;
 
@@ -211,7 +211,7 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
 
 size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
 {
-    debug("directRead: size=%zu  position=%zu recordSize=%zu\n", size, this->position, this->blockSize);
+    debug("directRead: size=%zu  position=%zu cipherSize=%zu\n", size, this->position, this->blockSize);
     /* Read multiple records, but no partials */
     size_t alignedSize = sizeRoundDown(size, this->blockSize);
     size_t actual = passThroughReadAll(this, buf, alignedSize, error);

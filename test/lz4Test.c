@@ -23,7 +23,7 @@ void testMain()
                     fileSystemSinkNew(1))));
 
 
-    //singleReadSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1024, 64);
+    singleReadSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1024, 64);
     readSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4");
 
 }

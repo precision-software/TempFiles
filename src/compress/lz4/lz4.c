@@ -1,6 +1,7 @@
 /* */
 /* Created by John Morris on 11/1/22. */
 /* */
+//#define DEBUG
 #include <stdlib.h>
 #include <lz4frame.h>
 #include "common/debug.h"
@@ -42,6 +43,7 @@ struct Lz4Compress
 
 Filter *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Error *error)
 {
+    debug("lz4Open: path=%s  oflags=0x%x\n", path, oflags);
     /* Open the compressed file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
     Lz4Compress *this = lz4CompressNew(pipe->recordSize, next);
@@ -260,7 +262,7 @@ size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fr
         return 0;
 
     size_t actual = headerSize + bodySize + tailSize;
-    debug("lz4CompressBuffer: actual=%zu   buf=%s\n", actual, asHex(this->buf, actual));
+    debug("lz4CompressBuffer: actual=%zu   cipherBuf=%s\n", actual, asHex(this->buf, actual));
     return actual;
 }
 
@@ -277,7 +279,7 @@ size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fr
  */
 size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error)
 {
-    debug("lz4DeompressBuffer: fromSize=%zu toSize=%zu  buf=%s\n", fromSize, toSize, asHex(this->buf, fromSize));
+    debug("lz4DeompressBuffer: fromSize=%zu toSize=%zu  cipherBuf=%s\n", fromSize, toSize, asHex(this->buf, fromSize));
     /* Create a decompression context */
     LZ4F_dctx *dctx;
     if (isErrorLz4(LZ4F_createDecompressionContext(&dctx, LZ4F_VERSION), error))
@@ -298,7 +300,7 @@ size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *
     if (isErrorLz4(LZ4F_freeDecompressionContext(dctx), error))
         return 0;
 
-    debug("lz4DecompressBuffer: toSize=%zu buf=%.*s\n", toSize, (int)toSize, toBuf);
+    debug("lz4DecompressBuffer: toSize=%zu cipherBuf=%.*s\n", toSize, (int)toSize, toBuf);
     return toSize;
 }
 

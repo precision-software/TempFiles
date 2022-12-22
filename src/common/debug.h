@@ -6,8 +6,11 @@
 
 #include "common/filter.h"
 
-//#define debug(args...) printf(args)
+#ifdef DEBUG
+#define debug(args...) printf(args)
+#else
 #define debug(...) ((void) 0)
+#endif
 
 /*
  * Quick and dirty debug function to display a buffer in hex.
