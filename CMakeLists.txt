@@ -13,9 +13,7 @@ add_executable(rawTest test/rawTest.c
         src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h)
 
-
-
-add_executable(blockifyTest test/blockifyTest.c
+add_executable(bufferedTest test/bufferedTest.c
         src/file/buffered.c src/file/buffered.h
         test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
         src/common/filter.c src/common/filter.h
@@ -23,7 +21,6 @@ add_executable(blockifyTest test/blockifyTest.c
         src/file/fileSystemSink.c src/file/fileSystemSink.h
         src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h)
-
 
 add_executable(aeadTest test/aeadTest.c
         src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
@@ -36,18 +33,6 @@ add_executable(aeadTest test/aeadTest.c
         src/file/buffered.c src/file/buffered.h)
 target_link_libraries(aeadTest crypto)
 
-add_executable(aeadSeekTest test/aeadSeekTest.c
-        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemSink.c src/file/fileSystemSink.h
-        src/common/error.h src/file/fileSource.h src/file/fileSource.c
-        src/common/syscall.c src/common/syscall.h
-        src/file/buffered.c src/file/buffered.h)
-target_link_libraries(aeadSeekTest crypto)
-
-
 add_executable(lz4Test test/lz4Test.c
         src/compress/lz4/lz4.c  src/compress/lz4/lz4.h  src/file/buffered.h src/file/buffered.c
         test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
@@ -58,7 +43,6 @@ add_executable(lz4Test test/lz4Test.c
         src/common/syscall.c src/common/syscall.h
         src/file/buffered.c src/file/buffered.h)
 target_link_libraries(lz4Test lz4)
-
 
 add_executable(fileSplitTest test/fileSplitTest.c
         src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
