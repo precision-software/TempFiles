@@ -3,7 +3,8 @@
 /* */
 //#define DEBUG
 #include <stdlib.h>
-#include <lz4frame.h>
+#include <lz4.h>
+//#include <lz4frame.h>
 #include "common/debug.h"
 #include "common/filter.h"
 #include "compress/lz4/lz4.h"
@@ -27,15 +28,13 @@ struct Lz4Compress
 
     size_t recordSize;                /* Configured size of uncompressed record. */
     size_t compressedSize;            /* upper limit on compressed record size */
-    Byte *buf;                        /* Buffer to hold compressed data */
+    Byte *compressedBuf;                        /* Buffer to hold compressed data */
     size_t bufActual;                 /* The amount of compressed data in buffer */
 
     FileSource *indexFile;            /* Index file created "on the fly" to support record seeks. */
     pos_t compressedPosition;         /* The offset of the current compressed record within the compressed file */
 
-    LZ4F_preferences_t preferences;   /* Choices for compression. */
-
-    Byte *tempBuf;                    /* temporary buffer to hold decrypted data when probing for size */
+    Byte *tempBuf;                    /* temporary buffer to hold decompressed data when probing for size */
 
     bool previousRead;                /* true if the previous op was a read (or equivaleht) */
 };
@@ -82,7 +81,7 @@ size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 
     /* Allocate a buffer to hold a compressed record */
     this->compressedSize = compressedSize(this->recordSize);
-    this->buf = malloc(this->compressedSize);
+    this->compressedBuf = malloc(this->compressedSize);
     this->tempBuf = malloc(this->recordSize);
 
     /* Our caller should send us records of this size. */
@@ -103,8 +102,8 @@ size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
     this->previousRead = false;
 
     /* Compress the record, and write it out as a variable sized record */
-    size_t actual = lz4CompressBuffer(this, this->buf, this->compressedSize, buf, size, error);
-    passThroughWriteSized(this, this->buf, actual, error);
+    size_t actual = lz4CompressBuffer(this, this->compressedBuf, this->compressedSize, buf, size, error);
+    passThroughWriteSized(this, this->compressedBuf, actual, error);
     if (isError(*error))
         return 0;
 
@@ -133,7 +132,7 @@ size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
     this->previousRead = true;
 
     /* Read the compressed record, */
-    size_t compressedActual = passThroughReadSized(this, this->buf, this->compressedSize, error);
+    size_t compressedActual = passThroughReadSized(this, this->compressedBuf, this->compressedSize, error);
     if (isError(*error))
         return 0;
 
@@ -141,7 +140,7 @@ size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
     this->compressedPosition += (compressedActual + 4);
 
     /* Decompress the record we just read. */
-    size_t actual = lz4DecompressBuffer(this, buf, size, this->buf, compressedActual, error);
+    size_t actual = lz4DecompressBuffer(this, buf, size, this->compressedBuf, compressedActual, error);
 
     return actual;
 }
@@ -213,8 +212,8 @@ void lz4CompressClose(Lz4Compress *this, Error *error)
 {
     fileClose(this->indexFile, error);
     passThroughClose(this, error);
-    if (this->buf != NULL)
-        free(this->buf);
+    if (this->compressedBuf != NULL)
+        free(this->compressedBuf);
     if (this->tempBuf != NULL)
         free(this->tempBuf);
     free(this);
@@ -230,42 +229,15 @@ void lz4CompressClose(Lz4Compress *this, Error *error)
  * @param fromSize - the size of the uncompressed .
  * @param error - keeps track of the error status.
  * @return - the number of compressed bytes.
- *
- * TODO: ensure the context is released if an error occurs.
  */
 size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error)
 {
     debug("lz4CompressBuffer: toSize=%zu fromSize=%zu data=%.*s\n", toSize, fromSize, (int)fromSize, (char*)fromBuf);
-    /* Create a compression context */
-    LZ4F_cctx *ctx = NULL;
-    if (isErrorLz4(LZ4F_createCompressionContext(&ctx, LZ4F_VERSION), error))
-        return 0;
+    int actual = LZ4_compress_default((char*)fromBuf, (char*)toBuf, (int)fromSize, (int)toSize);
+    if (actual < 0)
+        return filterError(error, "lz4 unable to compress the buffer");
 
-    /* Start compression, possibly generating a header. */
-    size_t headerSize = LZ4F_compressBegin(ctx, toBuf, toSize, NULL);
-    if  (isErrorLz4(headerSize, error))
-        return 0;
-    toBuf += headerSize;
-    toSize -= headerSize;
-
-    /* Compress "fromBuf" into "toBuf", recording any possible error. */
-    size_t bodySize = LZ4F_compressUpdate(ctx, toBuf, toSize, fromBuf, fromSize, NULL);
-    if (isErrorLz4(bodySize, error))
-        return 0;
-    toBuf += bodySize;
-    toSize -= bodySize;
-
-    /* Finish compressing the buffer */
-    size_t tailSize = LZ4F_compressEnd(ctx, toBuf, toSize, NULL);
-    if (isErrorLz4(tailSize, error))
-        return 0;
-
-    /* release the compression context */
-    if (isErrorLz4(LZ4F_freeCompressionContext(ctx), error))
-        return 0;
-
-    size_t actual = headerSize + bodySize + tailSize;
-    debug("lz4CompressBuffer: actual=%zu   cipherBuf=%s\n", actual, asHex(this->buf, actual));
+    debug("lz4CompressBuffer: actual=%d   cipherBuf=%s\n", actual, asHex(this->compressedBuf, actual));
     return actual;
 }
 
@@ -282,29 +254,13 @@ size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fr
  */
 size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error)
 {
-    debug("lz4DeompressBuffer: fromSize=%zu toSize=%zu  cipherBuf=%s\n", fromSize, toSize, asHex(this->buf, fromSize));
-    /* Create a decompression context */
-    LZ4F_dctx *dctx;
-    if (isErrorLz4(LZ4F_createDecompressionContext(&dctx, LZ4F_VERSION), error))
-        return 0;
+    debug("lz4DeompressBuffer: fromSize=%zu toSize=%zu  cipherBuf=%s\n", fromSize, toSize, asHex(this->compressedBuf, fromSize));
+    int actual = LZ4_decompress_safe((char*)fromBuf, (char*)toBuf, (int)fromSize, (int)toSize);
+    if (actual < 0)
+        return filterError(error, "lz4 unable to decompress a buffer");
 
-    /* Decompress "fromBuf" into "toBuf", recording any possible error. */
-    memset(toBuf, 'Y', toSize);  // debug
-    size_t actualFromSize = fromSize;
-    size_t ret = LZ4F_decompress(dctx, toBuf, &toSize, fromBuf, &actualFromSize, NULL);
-    if (isErrorLz4(ret, error))
-        return 0;
-
-    /* We should have consumed all the bytes. If not, we probably are generating more output than expected */
-    if (actualFromSize != fromSize)
-        return filterError(error, "Lz4 decompression didn't fully decompress a buffer");
-
-    /* release the decompression context */
-    if (isErrorLz4(LZ4F_freeDecompressionContext(dctx), error))
-        return 0;
-
-    debug("lz4DecompressBuffer: toSize=%zu cipherBuf=%.*s\n", toSize, (int)toSize, toBuf);
-    return toSize;
+    debug("lz4DecompressBuffer: actual=%d cipherBuf=%.*s\n", actual, actual, toBuf);
+    return actual;
 }
 
 
@@ -316,7 +272,7 @@ size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *
  */
 size_t compressedSize(size_t rawSize)
 {
-    return LZ4F_compressBound(rawSize, NULL);
+    return LZ4_compressBound((int)rawSize);
 }
 
 
@@ -334,21 +290,10 @@ FilterInterface lz4CompressInterface = (FilterInterface) {
  * Create a filter for writing and reading compressed files.
  * @param recordSize - size of individually compressed records.
  */
-Lz4Compress *lz4CompressNew(size_t recordSize, Filter *next)
+Lz4Compress *lz4CompressNew(size_t recordSize, void *next)
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){.recordSize = recordSize};
     filterInit(this, &lz4CompressInterface, next);
     return this;
-}
-
-
-/*
- * Helper to make LZ4 error handling more concise. Returns true and updates error if an LZ4 error occurred.
- * TODO: We need to copy the message or repeated errors will change it underneath us.
- */
-static bool isErrorLz4(size_t size, Error *error) {
-    if ((errorIsOK(*error)||errorIsEOF(*error)) && LZ4F_isError(size))
-        *error = (Error){.code=errorCodeFilter, .msg=LZ4F_getErrorName(size), .causedBy=NULL};
-    return isError(*error);
 }

@@ -53,3 +53,16 @@ add_executable(fileSplitTest test/fileSplitTest.c
         src/file/fileSystemSink.c src/file/fileSystemSink.h
         src/common/error.h src/file/fileSource.h src/file/fileSource.c
         src/common/syscall.c src/common/syscall.h)
+
+add_executable(kitchenSinkTest test/kitchenSinkTest.c
+        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
+        src/compress/lz4/lz4.c  src/compress/lz4/lz4.h
+        src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
+        src/file/buffered.c src/file/buffered.h
+        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
+        src/common/filter.c src/common/filter.h
+        src/common/passThrough.c src/common/passThrough.h
+        src/file/fileSystemSink.c src/file/fileSystemSink.h
+        src/common/error.h src/file/fileSource.h src/file/fileSource.c
+        src/common/syscall.c src/common/syscall.h)
+target_link_libraries(kitchenSinkTest lz4 crypto)

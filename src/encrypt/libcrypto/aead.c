@@ -48,7 +48,7 @@ struct AeadFilter
     /* Configuration */
     Byte key[EVP_MAX_KEY_LENGTH];       /* The key for encrypting/decrypting */
     char cipherName[MAX_CIPHER_NAME];   /* The name of the cipher, if encrypting a new file. */
-    size_t plainSize;             /* The plaintext record size, if encrypting a new file */
+    size_t plainSize;                   /* The plaintext record size, if encrypting a new file */
 
     /* Cipher State (based on the encryption algorithm) */
     size_t keySize;              /* The size of the key in bytes */
@@ -58,7 +58,7 @@ struct AeadFilter
     bool hasPadding;             /* Whether cipher block padding is added to the encrypted records */
     Byte iv[EVP_MAX_IV_LENGTH];  /* The initialization vector for the sequence of records. */
     EVP_CIPHER *cipher;          /* The libcrypto cipher structure */
-    EVP_CIPHER_CTX *ctx;         /* Libcrypto context. */
+    EVP_CIPHER_CTX *ctx;         /* libcrypto context. */
 
     /* Our state */
     size_t headerSize;            /* Size of the header we read/wrote to the encrypted file */
@@ -459,8 +459,8 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
     aead_decrypt(this, plainEmpty, sizeof(plainEmpty),
          header, validateSize, emptyBlock, emptySize, tag, error);
 
-    /* set the ciphertext block size. TODO: Make calculation a function. */
-    this->cipherSize = this->plainSize + paddingSize(this, this->cipherSize) + this->tagSize;
+    /* Calculate the ciphertext size for a full plaintext record */
+    this->cipherSize = this->plainSize + paddingSize(this, this->plainSize) + this->tagSize;
 }
 
 

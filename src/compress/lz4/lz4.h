@@ -8,7 +8,7 @@
 
 typedef struct Lz4Compress Lz4Compress;
 
-Lz4Compress *lz4CompressNew(size_t bufferSize, Filter *next);
+Lz4Compress *lz4CompressNew(size_t bufferSize, void *next);
 void Lz4CompressFree(void *this);
 
 #endif /*FILTER_LZ4_H */

@@ -70,7 +70,6 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 
 /*
  * Read a variable size record.
- *   TODO: 1) size should not be part of the data, 2) Also implemented as a filter, 2) include size separately in AEAD validation.
  */
 size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
 {
@@ -79,7 +78,7 @@ size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
     if (isError(*error))
         return 0;
     if (recordSize > size)
-        return filterError(error, "Record length is too large");
+        return filterError(error, "ReadSized: Record length is too large");
 
     /* Read the rest of the record */
     size_t actual = passThroughReadAll(this, record, recordSize, error);
