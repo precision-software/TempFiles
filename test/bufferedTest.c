@@ -15,7 +15,7 @@ void testMain()
     system("rm -rf " TEST_DIR "buffered; mkdir -p " TEST_DIR "buffered");
 
     beginTestGroup("Buffered Files");
-    FileSource *stream = fileSourceNew(blockifyNew(1024,fileSystemSinkNew(1)));
+    FileSource *stream = fileSourceNew(blockifyNew(1024,fileSystemSinkNew()));
 
     singleSeekTest(stream, TEST_DIR "buffered/testfile_%u_%u.dat", 64, 64);
 

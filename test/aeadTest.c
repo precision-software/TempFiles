@@ -19,7 +19,7 @@ void testMain()
         fileSourceNew(
             blockifyNew(1024,
                 aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
-                    fileSystemSinkNew(1))));
+                    fileSystemSinkNew())));
 
     //singleSeekTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat", 64, 1024);
     seekTest(stream, TEST_DIR "encryption/testfile_%u_%u.dat");

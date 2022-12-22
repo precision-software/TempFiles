@@ -18,7 +18,6 @@ struct FileSystemSink {
     bool writable;   /* Can we write to the file? */
     bool readable;   /* Can we read from the file? */
     bool eof;        /* Has the currently open file read past eof? */
-    size_t blockSize; /* The recommended size for I/O. BufferedFile will attempt to align */
 };
 
 static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
@@ -32,7 +31,7 @@ static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered
 FileSystemSink *fileSystemOpen(FileSystemSink *sink, char *path, int oflags, int perm, Error *error)
 {
     /* Clone ourself. */
-    FileSystemSink *this = fileSystemSinkNew(sink->blockSize);
+    FileSystemSink *this = fileSystemSinkNew();
 
     /* Check the oflags we are opening the file in. TODO: move checks to fileSource. */
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
@@ -115,7 +114,6 @@ void fileSystemSync(FileSystemSink *this, Error *error)
  */
 size_t fileSystemBlockSize(FileSystemSink *this, size_t prevSize, Error *error)
 {
-    this->blockSize = prevSize;
     return 1;
 }
 
@@ -152,17 +150,12 @@ FilterInterface fileSystemInterface = (FilterInterface)
 /**
  * Create a new Posix file system Sink.
  */
-FileSystemSink *fileSystemSinkNew(size_t blockSize)
+FileSystemSink *fileSystemSinkNew()
 {
-    /* Default block size, OK for streaming, should match file system block size for blocks. */
-    if (blockSize == 0)
-        blockSize = 16*1024;
-
     FileSystemSink *this = malloc(sizeof(FileSystemSink));
     *this = (FileSystemSink)
     {
         .fd = -1,
-        .blockSize = blockSize,
         .filter = (Filter){
             .iface=&fileSystemInterface,
             .next=NULL}
