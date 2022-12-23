@@ -25,9 +25,9 @@ void testMain()
                 lz4CompressNew(16*1024,
                     blockifyNew(1024,
                         aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
-                            fileSplitFilterNew(16 * 1024, formatPath, "%s-%06d.seg",
+                            fileSplitFilterNew(2 * 1024, formatPath, "%s-%06d.seg",
                                 fileSystemSinkNew()))))));
 
-    //singleStreamTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat", 0, 1024);
+    //singleStreamTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat", 1024, 16*1024);
     readSeekTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat");
 }

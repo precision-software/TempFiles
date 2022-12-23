@@ -21,7 +21,7 @@ void testMain()
                     blockifyNew(1024,
                             fileSplitFilterNew(1024 * 1024, formatPath, "%s-%06d.seg",
                                                fileSystemSinkNew())));
-    streamTest(split, TEST_DIR "split/testfile_%u_%u");
+    seekTest(split, TEST_DIR "split/testfile_%u_%u");
 
     //splitVerify("Split into multiple files: verify files");
 }

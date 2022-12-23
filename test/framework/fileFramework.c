@@ -1,6 +1,8 @@
 //
 // Created by John Morris on 10/20/22.
 //
+//#define DEBUG
+#include "common/debug.h"
 #include <stdio.h>
 #include <sys/fcntl.h>
 #include "file/buffered.h"
@@ -49,6 +51,7 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
  */
 void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
+    debug("generateFile: path=%s\n", path);
     Error error = errorOK;
     FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     Byte *buf = malloc(bufferSize);
@@ -71,6 +74,7 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 /* Verify a file has the correct data */
 void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
+    debug("verifyFile: path=%s\n", path);
     Error error = errorOK;
     FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
@@ -102,6 +106,7 @@ void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
  */
 void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
+    debug("allocateFile: path=%s\n", path);
     /* Start out by allocating space and filling the file with "X"s. */
     Error error = errorOK;
     FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
@@ -128,6 +133,7 @@ static const int prime = 3197;
 
 void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
 {
+    debug("generateRandomFile: path=%s\n", path);
     /* The nr of blocks must be relatively prime to "prime", otherwise we won't visit all the blocks. */
     size_t nrBlocks = (fileSize + blockSize - 1) / blockSize;
     PG_ASSERT( nrBlocks == 0 || (nrBlocks % prime) != 0);
@@ -162,6 +168,7 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
 
 void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
 {
+    debug("appendFile: path=%s\n", path);
     Error error = errorOK;
     FileSource *file = fileOpen(pipe, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
@@ -193,6 +200,7 @@ void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
  */
 void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
 {
+    debug("verifyRandomFile: path=%s\n", path);
     Error error = errorOK;
     FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);

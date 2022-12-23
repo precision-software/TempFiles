@@ -14,7 +14,10 @@
  *      splitter = fileSplitFilterNew(64*1024*1024, formatPath, "/tmp/postgres/%s-%d.dat", next)
  *  The segments would be named  /tmp/postgres/NAME-0.dat, /tmp/postgres/NAME-1.dat and so on.
  */
+//#define DEBUG
 #include <stdlib.h>
+#include <sys/fcntl.h>
+#include "common/debug.h"
 #include "common/passThrough.h"
 #include "fileSplit/fileSplit.h"
 #include "file/fileSource.h"
@@ -23,14 +26,19 @@
 struct FileSplitFilter
 {
     Filter filter;      /* Common to all "filters" */
-    size_t segmentSize; /* Number of bytes each segment will hold, except last. */
-    PathGetter getPath; /* Function to calculate the name of each file segment. */
-    void *pathData;     /* Object pased to the getPath function */
-    size_t position;    /* Current position within the group of files. */
+
+    /* Configuration */
+    size_t suggestedSize; /* Suggested number of bytes each segment will hold, except last. */
+    PathGetter getPath;   /* Function to calculate the name of each file segment. */
+    void *pathData;       /* Object pased to the getPath function */
+
+    /* Current state  */
+    size_t segmentSize;   /* Actual number of bytes each segment will hold, except last */
+    size_t position;      /* Current position within the group of files. */
     char name[PATH_MAX];  /* Name of the overall file set, used to calculate segment names. */
     int oflags;           /* The mode we open each segment in. */
     int perm;             /* If creating files, use this permission. */
-    FileSource   *file;   /* points to the current open file segment, null otherwise */
+    FileSource *file;     /* points to the current open file segment, null otherwise */
 };
 
 static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
@@ -48,16 +56,26 @@ pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error);
  * @param perm - If creating a file, the Posix style permissions of the new file.
  * @return     - Error code indicating "OK" or error.
  */
-FileSplitFilter *fileSplitOpen(FileSplitFilter *pipeline, char *name, int oflags, int perm, Error *error)
+FileSplitFilter *fileSplitOpen(FileSplitFilter *self, char *name, int oflags, int perm, Error *error)
 {
     /* Clone the following pipeline. A forced error will simply clone the pipeline and not open it. */
     Error ignoreError = errorEOF;
-    Filter *clone = passThroughOpen(pipeline, "", oflags, perm, &ignoreError);
+    Filter *clone = passThroughOpen(self, NULL, oflags, perm, &ignoreError);
 
     /* Clone ourselves */
-    FileSplitFilter *this = fileSplitFilterNew(pipeline->segmentSize, pipeline->getPath, pipeline->pathData, clone);
+    FileSplitFilter *this = fileSplitFilterNew(self->suggestedSize, self->getPath, self->pathData, clone);
     if (isError(*error))
         return this;
+
+    /* We do not support O_APPEND directly. */
+    if (oflags & O_APPEND)
+        return (filterError(error, "fileSplit does not support O_APPEND - must use Buffered filter"), this);
+
+    /* Truncation has to be handled separately. For now, just clear the flag */
+    bool truncate = (oflags & O_TRUNC) == O_TRUNC;
+    if (truncate)
+        debug("FileSplit truncation not implented yet\n");
+    oflags &= ~O_TRUNC;
 
     /* Save the open parameters since we will use them when opening each segment. */
     this->oflags = oflags;
@@ -66,10 +84,14 @@ FileSplitFilter *fileSplitOpen(FileSplitFilter *pipeline, char *name, int oflags
         return (filterError(error, "fileSplitOpen: path name too long"), this);
     strcpy(this->name, name);
 
-    /* Position at the beginning of the first segment, creating it if writing. */
+    /* Position at the beginning of the first segment */
     this->position = 0;
     this->file = NULL;
     openCurrentSegment(this, error);
+
+    /* We may need to create future segments, so add O_CREAT to the flags */
+    if ((this->oflags & O_ACCMODE) != O_RDONLY)
+        this->oflags |= O_CREAT;
 
     return this;
 }
@@ -146,7 +168,7 @@ size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *erro
 {
     if (isError(*error)) return 0;
 
-    /* If crossing segment boundary, then truncate to the end of segment. */
+    /* If crossing segment boundary, then truncate write at the end of segment. */
     size_t offset = this->position % this->segmentSize;
     size_t truncSize = sizeMin( this->segmentSize - offset, size);
 
@@ -208,9 +230,8 @@ size_t fileSplitBlockSize(FileSplitFilter *this, size_t recordSize, Error *error
     /* Pass through the size request */
     size_t nextSize = passThroughBlockSize(this, recordSize, error);
 
-    /* Our only constraint is the segment must contain an even number of records */
-    if (this->segmentSize % nextSize != 0)
-        return filterError(error, "File split size must contain even number of records");
+    /* Round up the segment size to contain an even number of records */
+    this->segmentSize = sizeRoundUp(this->suggestedSize, recordSize);
 
     return nextSize;
 }
@@ -226,19 +247,19 @@ static FilterInterface fileSplitInterface = {
 
 /**
  * Define a group of segmented files.
- * @param segmentSize - the number of bytes in each segment (except the last)
+ * @param suggestedSize - the number of bytes in each segment (except the last)
  * @param getPath - A function, which given (pathData, name, segment index) generates a path.
  * @param pathData - opaque data used by getPath.
  * @param next - pointer to the next filter in the sequence.
  * @return - a constructed filter for segmenting files.
  */
-FileSplitFilter *fileSplitFilterNew(size_t segmentSize, PathGetter getPath, void *pathData, void *next)
+FileSplitFilter *fileSplitFilterNew(size_t suggestedSize, PathGetter getPath, void *pathData, void *next)
 {
     FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
     *this = (FileSplitFilter) {
         .getPath = getPath,
         .pathData = pathData,
-        .segmentSize = segmentSize
+        .suggestedSize = suggestedSize
     };
     return filterInit(this, &fileSplitInterface, next);
 }

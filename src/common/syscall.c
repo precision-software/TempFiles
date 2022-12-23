@@ -68,7 +68,7 @@ int sys_open(char *path, int oflag, int perm, Error *error)
     if (fd == -1)
         *error = systemError();
 
-    debug("sys_open: fd=%d  path=%s  msg=%s\n", fd, path, error->msg);
+    debug("sys_open: fd=%d  path=%s  oflags=0x%x msg=%s\n", fd, path, oflag, error->msg);
     return fd;
 }
 
@@ -80,6 +80,7 @@ void sys_close(int fd, Error *error)
 {
     if (fd != -1 && close(fd) == -1 && errorIsOK(*error))
         *error = systemError();
+    debug("sys_close: fd=%d  msg=%s\n", fd, error->msg);
 }
 
 
