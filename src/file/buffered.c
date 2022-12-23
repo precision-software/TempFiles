@@ -1,13 +1,13 @@
 /**
- * Blockify reconciles a byte stream input with an output of fixed size blocks.
+ * Buffered reconciles a byte stream input with an output of fixed size blocks.
  * Because output blocks are fixed size, it is possible to do random Seeks
  * and Writes to the output file.
  *
- * Blockify replicates the functionality of fread/fwrite/fseek.
+ * Buffered replicates the functionality of fread/fwrite/fseek.
  * Seeks and O_APPEND are not compatible with subsequent streaming filters which create
  * variable size blocks. (eg. compression).
  *
- * Note that Blockify could support O_DIRECT files if the last block is padded and any
+ * Note that Buffered could support O_DIRECT files if the last block is padded and any
  * metadata is stored in a separate location. This is a future goal.
  *
  * Some logical assertions about blocks and file position.
@@ -36,7 +36,7 @@
 /**
  * Structure containing the state of the stream, including its buffer.
  */
-struct Blockify
+struct Buffered
 {
     Filter filter;        /* Common to all filters */
     size_t suggestedSize; /* The suggested buffer size. We may make it a bit bigger */
@@ -58,18 +58,18 @@ struct Blockify
 
 
 /* Forward references */
-size_t blockifySeek(Blockify *this, size_t position, Error *error);
-static size_t copyOut(Blockify *this, Byte *buf, size_t size);
-static size_t copyIn(Blockify *this, Byte *buf, size_t size);
-static bool flushBuffer(Blockify *this, Error *error);
-static bool fillBuffer(Blockify *this, Error *error);
-size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error);
-size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error);
+size_t bufferedSeek(Buffered *this, size_t position, Error *error);
+static size_t copyOut(Buffered *this, Byte *buf, size_t size);
+static size_t copyIn(Buffered *this, Byte *buf, size_t size);
+static bool flushBuffer(Buffered *this, Error *error);
+static bool fillBuffer(Buffered *this, Error *error);
+size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error);
+size_t directRead(Buffered *this, Byte *buf, size_t size, Error *error);
 
 /**
  * Open a buffered file, reading, writing or both.
  */
-Blockify *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *error)
+Buffered *bufferedOpen(Buffered *pipe, char *path, int oflags, int perm, Error *error)
 {
     /* Below us, we need to read/modify/write even if write only. */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
@@ -77,7 +77,7 @@ Blockify *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *
 
     /* Open the downstream file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
-    Blockify *this = blockifyNew(pipe->suggestedSize, next);
+    Buffered *this = bufferedNew(pipe->suggestedSize, next);
     if (isError(*error))
         return this;
 
@@ -107,9 +107,9 @@ Blockify *blockifyOpen(Blockify *pipe, char *path, int oflags, int perm, Error *
 /**
  * Write data to the buffered file.
  */
-size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
+size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
 {
-    debug("blockifyWrite: size=%zu  position=%zu \n", size, this->position);
+    debug("bufferedWrite: size=%zu  position=%zu \n", size, this->position);
     assert(size > 0);
     if (isError(*error))
         return 0;
@@ -153,7 +153,7 @@ size_t blockifyWrite(Blockify *this, Byte *buf, size_t size, Error* error)
 }
 
 
-size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
+size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error)
 {
     /* Write out multiple records, but no partials */
     size_t alignedSize = sizeRoundDown(size, this->blockSize);
@@ -170,9 +170,9 @@ size_t directWrite(Blockify *this, Byte *buf, size_t size, Error *error)
  * Read bytes from the buffered stream.
  * Note it may take multiple reads to get all the data or to reach EOF.
  */
-size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
+size_t bufferedRead(Buffered *this, Byte *buf, size_t size, Error *error)
 {
-    debug("blockifyRead: position=%zu size=%zu cipherSize=%zu\n", this->position, size, this->blockSize);
+    debug("bufferedRead: position=%zu size=%zu cipherSize=%zu\n", this->position, size, this->blockSize);
     if (!errorIsOK(*error))
         return 0;
 
@@ -204,12 +204,12 @@ size_t blockifyRead(Blockify *this, Byte *buf, size_t size, Error *error)
     this->position += actual;
 
     /* Return the number of bytes transferred. */
-    debug("blockifyRead: actual=%zu\n", actual);
+    debug("bufferedRead: actual=%zu\n", actual);
     return actual;
 }
 
 
-size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
+size_t directRead(Buffered *this, Byte *buf, size_t size, Error *error)
 {
     debug("directRead: size=%zu  position=%zu cipherSize=%zu\n", size, this->position, this->blockSize);
     /* Read multiple records, but no partials */
@@ -236,9 +236,9 @@ size_t directRead(Blockify *this, Byte *buf, size_t size, Error *error)
 /**
  * Seek to a position
  */
-size_t blockifySeek(Blockify *this, size_t position, Error *error)
+size_t bufferedSeek(Buffered *this, size_t position, Error *error)
 {
-    debug("blockifySeek: this->position=%zu  position=%lld\n", this->position, (off_t)position);
+    debug("bufferedSeek: this->position=%zu  position=%lld\n", this->position, (off_t)position);
     if (isError(*error))
         return this->position;
 
@@ -256,7 +256,7 @@ size_t blockifySeek(Blockify *this, size_t position, Error *error)
 
     /* If we are moving to a different block ... */
     size_t newBlock = sizeRoundDown(position, this->blockSize);
-    debug("blockifySeek: position=%zu  newBlock=%zu blockPosition=%zu\n", position, newBlock, this->blockPosition);
+    debug("bufferedSeek: position=%zu  newBlock=%zu blockPosition=%zu\n", position, newBlock, this->blockPosition);
     if (newBlock != this->blockPosition)
     {
         /* If dirty, flush current block. */
@@ -277,7 +277,7 @@ size_t blockifySeek(Blockify *this, size_t position, Error *error)
 /**
  * Close the buffered file.
  */
-void blockifyClose(Blockify *this, Error *error)
+void bufferedClose(Buffered *this, Error *error)
 {
     /* Flush our buffers. */
     flushBuffer(this, error);
@@ -296,7 +296,7 @@ void blockifyClose(Blockify *this, Error *error)
 /**
  * Synchronize any written data to persistent storage.
  */
-void blockifySync(Blockify *this, Error *error)
+void bufferedSync(Buffered *this, Error *error)
 {
     /* Flush our buffers. */
     flushBuffer(this, error);
@@ -312,7 +312,7 @@ void blockifySync(Blockify *this, Error *error)
  * single byte blocks (or larger) from upstream, and we match a multiple of
  * whatever block size is requested downstream.
  */
-size_t blockifyBlockSize(Blockify *this, size_t prevSize, Error *error)
+size_t bufferedBlockSize(Buffered *this, size_t prevSize, Error *error)
 {
     /* Suggest a block size bigger than what is requested of us. */
     size_t suggestedSize = sizeMax(this->suggestedSize, prevSize);
@@ -333,15 +333,15 @@ size_t blockifyBlockSize(Blockify *this, size_t prevSize, Error *error)
 }
 
 
-FilterInterface blockifyInterface = (FilterInterface)
+FilterInterface bufferedInterface = (FilterInterface)
         {
-                .fnOpen = (FilterOpen)blockifyOpen,
-                .fnWrite = (FilterWrite)blockifyWrite,
-                .fnClose = (FilterClose)blockifyClose,
-                .fnRead = (FilterRead)blockifyRead,
-                .fnSync = (FilterSync)blockifySync,
-                .fnBlockSize = (FilterBlockSize)blockifyBlockSize,
-                .fnSeek = (FilterSeek)blockifySeek,
+                .fnOpen = (FilterOpen)bufferedOpen,
+                .fnWrite = (FilterWrite)bufferedWrite,
+                .fnClose = (FilterClose)bufferedClose,
+                .fnRead = (FilterRead)bufferedRead,
+                .fnSync = (FilterSync)bufferedSync,
+                .fnBlockSize = (FilterBlockSize)bufferedBlockSize,
+                .fnSeek = (FilterSeek)bufferedSeek,
         } ;
 
 
@@ -349,10 +349,10 @@ FilterInterface blockifyInterface = (FilterInterface)
  Create a new buffer filter object.
  It converts input bytes to records expected by the next filter in the pipeline.
  */
-Blockify *blockifyNew(size_t suggestedSize, void *next)
+Buffered *bufferedNew(size_t suggestedSize, void *next)
 {
-    Blockify *this = palloc(sizeof(Blockify));
-    *this = (Blockify){0};
+    Buffered *this = palloc(sizeof(Buffered));
+    *this = (Buffered){0};
 
     /* Set the suggested buffersize, defaulting to 16Kb */
     if (suggestedSize == 0)
@@ -360,7 +360,7 @@ Blockify *blockifyNew(size_t suggestedSize, void *next)
     else
         this->suggestedSize = suggestedSize;
 
-    return filterInit(this, &blockifyInterface, next);
+    return filterInit(this, &bufferedInterface, next);
 }
 
 
@@ -368,7 +368,7 @@ Blockify *blockifyNew(size_t suggestedSize, void *next)
 /*
  * Clean a dirty buffer by writing it to disk. Does not change the contents of the buffer.
  */
-static bool flushBuffer(Blockify *this, Error *error)
+static bool flushBuffer(Buffered *this, Error *error)
 {
     debug("flushBuffer: position=%zu  bufActual=%zu  dirty=%d\n", this->position, this->blockActual, this->dirty);
 
@@ -386,7 +386,7 @@ static bool flushBuffer(Blockify *this, Error *error)
 /*
  * Read in a new buffer of data for the current position
  */
-static bool fillBuffer (Blockify *this, Error *error)
+static bool fillBuffer (Buffered *this, Error *error)
 {
     assert(!this->dirty);
     debug("fillBuffer: bufActual=%zu  blockPosition=%zu sizeConfirmed=%d  fileSize=%zu\n",
@@ -404,7 +404,7 @@ static bool fillBuffer (Blockify *this, Error *error)
     return isError(*error);
 }
 
-static size_t copyIn(Blockify *this, Byte *buf, size_t size)
+static size_t copyIn(Buffered *this, Byte *buf, size_t size)
 {
     /* Copy bytes into the buffer, up to end of data or end of buffer */
     size_t offset = this->position - this->blockPosition;
@@ -421,7 +421,7 @@ static size_t copyIn(Blockify *this, Byte *buf, size_t size)
     return actual;
 }
 
-static size_t copyOut(Blockify *this, Byte *buf, size_t size)
+static size_t copyOut(Buffered *this, Byte *buf, size_t size)
 {
     size_t offset = this->position - this->blockPosition;
     size_t actual = sizeMin(this->blockActual-offset, size);

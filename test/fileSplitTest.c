@@ -18,7 +18,7 @@ void testMain()
     beginTestGroup("File Splitting");
     FileSource *split =
             fileSourceNew(
-                    blockifyNew(1024,
+                    bufferedNew(1024,
                             fileSplitFilterNew(1024 * 1024, formatPath, "%s-%06d.seg",
                                                fileSystemSinkNew())));
     seekTest(split, TEST_DIR "split/testfile_%u_%u");

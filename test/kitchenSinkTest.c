@@ -21,9 +21,9 @@ void testMain()
     beginTestGroup("Kitchen Sink");
     FileSource *stream =
         fileSourceNew(
-            blockifyNew(16*1024,
+            bufferedNew(16*1024,
                 lz4CompressNew(16*1024,
-                    blockifyNew(1024,
+                    bufferedNew(1024,
                         aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                             fileSplitFilterNew(2 * 1024, formatPath, "%s-%06d.seg",
                                 fileSystemSinkNew()))))));

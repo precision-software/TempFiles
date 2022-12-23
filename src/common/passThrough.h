@@ -30,11 +30,11 @@ size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
 size_t passThroughReadSized(void *this, Byte *header, size_t size, Error *error);
 size_t passThroughWriteSized(void *this, Byte *header, size_t size, Error *error);
 
+/* Helper functions to read/write integers in network byte order (big endian) */
 bool passThroughPut1(void *this, size_t value, Error *error);
 bool passThroughPut2(void *this, size_t value, Error *error);
 bool passThroughPut4(void *this, size_t value, Error *error);
 bool passThroughPut8(void *this, size_t value, Error *error);
-
 size_t passThroughGet1(void *this, Error *error);
 size_t passThroughGet2(void *this, Error *error);
 size_t passThroughGet4(void *this, Error *error);

@@ -19,9 +19,9 @@ void testMain()
     beginTestGroup("LZ4 Compression");
     FileSource *lz4 =
             fileSourceNew(
-                blockifyNew(1024,
+                bufferedNew(1024,
                     lz4CompressNew(1024,
-                        blockifyNew(1024,
+                        bufferedNew(1024,
                             fileSystemSinkNew()))));
 
     singleReadSeekTest(lz4, TEST_DIR "compressed/testfile_%u_%u.lz4", 1024, 64);

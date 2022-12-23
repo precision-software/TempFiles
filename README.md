@@ -61,7 +61,7 @@
 - A "ByteStream" reads and writes bytes, ignoring the underlying
   structure of blocks.
 - A byte stream is equivalent to a block file with block size of 1 byte.
-- "Blockify" converts a byte stream to fixed size blocks.
+- "Buffered" converts a byte stream to fixed size blocks.
 
 ## Filters
  - Filters convert a block of data from one form to another.
@@ -83,7 +83,7 @@
 ```mermaid
 flowchart LR 
     source[FileSource<hr>fileRead<br>fileWrite <br> fileOpen <br> fileClose <br> fileSync]
-       <-- bytes --> Blockify <-- blocks -->
+       <-- bytes --> Buffered <-- blocks -->
     sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 

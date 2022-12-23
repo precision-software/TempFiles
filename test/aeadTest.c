@@ -17,7 +17,7 @@ void testMain()
     beginTestGroup("AES Encrypted Files");
     FileSource *stream =
         fileSourceNew(
-            blockifyNew(1024,
+            bufferedNew(1024,
                 aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                     fileSystemSinkNew())));
 

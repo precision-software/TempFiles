@@ -7,7 +7,7 @@
 
 #include "common/filter.h"
 
-typedef struct Blockify Blockify;
-Blockify *blockifyNew(size_t blockSize, void *next);
+typedef struct Buffered Buffered;
+Buffered *bufferedNew(size_t blockSize, void *next);
 
 #endif /*UNTITLED1_ByteStream_H */
