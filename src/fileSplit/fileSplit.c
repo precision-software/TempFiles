@@ -11,8 +11,11 @@
  *
  *  The following example uses the included "formatPath" function to generate
  *  names of 64MB temporary data segments.
- *      splitter = fileSplitFilterNew(64*1024*1024, formatPath, "/tmp/postgres/%s-%d.dat", next)
+ *      splitter = fileSplitNew(64*1024*1024, formatPath, "/tmp/postgres/%s-%d.dat", next)
  *  The segments would be named  /tmp/postgres/NAME-0.dat, /tmp/postgres/NAME-1.dat and so on.
+ *
+ *  TODO: improve random access performance by keeping segment files open if we seek away from them.
+ *  TODO: when given O_TRUNC, delete all segments except the first.
  */
 //#define DEBUG
 #include <stdlib.h>
@@ -23,7 +26,7 @@
 #include "file/fileSource.h"
 
 /* Structure defining the state for read/writing a group of split files */
-struct FileSplitFilter
+struct FileSplit
 {
     Filter filter;      /* Common to all "filters" */
 
@@ -43,9 +46,9 @@ struct FileSplitFilter
 
 static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
 
-static void closeCurrentSegment(FileSplitFilter *this, Error *error);
-static void openCurrentSegment(FileSplitFilter *this, Error *error);
-pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error);
+static void closeCurrentSegment(FileSplit *this, Error *error);
+static void openCurrentSegment(FileSplit *this, Error *error);
+pos_t fileSplitSeekEnd(FileSplit *this, Error *error);
 
 /**
  * Open a set of split files. These are a group of files which, when appended
@@ -56,26 +59,20 @@ pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error);
  * @param perm - If creating a file, the Posix style permissions of the new file.
  * @return     - Error code indicating "OK" or error.
  */
-FileSplitFilter *fileSplitOpen(FileSplitFilter *self, char *name, int oflags, int perm, Error *error)
+FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Error *error)
 {
     /* Clone the following pipeline. A forced error will simply clone the pipeline and not open it. */
     Error ignoreError = errorEOF;
     Filter *clone = passThroughOpen(self, NULL, oflags, perm, &ignoreError);
 
     /* Clone ourselves */
-    FileSplitFilter *this = fileSplitFilterNew(self->suggestedSize, self->getPath, self->pathData, clone);
+    FileSplit *this = fileSplitNew(self->suggestedSize, self->getPath, self->pathData, clone);
     if (isError(*error))
         return this;
 
     /* We do not support O_APPEND directly. */
     if (oflags & O_APPEND)
         return (filterError(error, "fileSplit does not support O_APPEND - must use Buffered filter"), this);
-
-    /* Truncation has to be handled separately. For now, just clear the flag */
-    bool truncate = (oflags & O_TRUNC) == O_TRUNC;
-    if (truncate)
-        debug("FileSplit truncation not implented yet\n");
-    oflags &= ~O_TRUNC;
 
     /* Save the open parameters since we will use them when opening each segment. */
     this->oflags = oflags;
@@ -89,9 +86,17 @@ FileSplitFilter *fileSplitOpen(FileSplitFilter *self, char *name, int oflags, in
     this->file = NULL;
     openCurrentSegment(this, error);
 
-    /* We may need to create future segments, so add O_CREAT to the flags */
+    /* TODO: If truncating, we need to remove any additional segments. */
+    bool truncate = (oflags & O_TRUNC) == O_TRUNC;
+    if (truncate)
+        debug("FileSplit truncation not implented yet\n");
+
+    /* We may need to create future segments, so add O_CREAT */
     if ((this->oflags & O_ACCMODE) != O_RDONLY)
         this->oflags |= O_CREAT;
+
+    /* We truncated the first segment and removed successive segments. We do NOT want to truncate segments when opening them */
+    this->oflags &= ~O_TRUNC;
 
     return this;
 }
@@ -99,7 +104,7 @@ FileSplitFilter *fileSplitOpen(FileSplitFilter *self, char *name, int oflags, in
 /**
  * Read from a set of split files as though they were a single file.
  */
-size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error)
+size_t fileSplitRead(FileSplit *this, Byte *buf, size_t size, Error *error)
 {
     if (isError(*error)) return 0;
 
@@ -119,7 +124,7 @@ size_t fileSplitRead(FileSplitFilter *this, Byte *buf, size_t size, Error *error
     return actual;
 }
 
-pos_t fileSplitSeek(FileSplitFilter *this, pos_t position, Error *error)
+pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
 {
     /* Special case for seeking to end */
     if (position == FILE_END_POSITION)
@@ -137,7 +142,7 @@ pos_t fileSplitSeek(FileSplitFilter *this, pos_t position, Error *error)
     return position;
 }
 
-pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error)
+pos_t fileSplitSeekEnd(FileSplit *this, Error *error)
 {
     /* Scan looking for last (partial) segment */
     /* TODO: make it a binary search instead of linear */
@@ -164,7 +169,7 @@ pos_t fileSplitSeekEnd(FileSplitFilter *this, Error *error)
 /**
  * Write to a group of split files, creating new segments if appropriate.
  */
-size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *error)
+size_t fileSplitWrite(FileSplit *this, Byte *buf, size_t size, Error *error)
 {
     if (isError(*error)) return 0;
 
@@ -187,7 +192,7 @@ size_t fileSplitWrite(FileSplitFilter *this, Byte *buf, size_t size, Error *erro
 /**
  * Close the group of files.
  */
-void fileSplitClose(FileSplitFilter *this, Error *error)
+void fileSplitClose(FileSplit *this, Error *error)
 {
     closeCurrentSegment(this, error);
     passThroughClose(this, error);
@@ -197,7 +202,7 @@ void fileSplitClose(FileSplitFilter *this, Error *error)
 /**
  * Close the currently active segment.
  */
-static void closeCurrentSegment(FileSplitFilter *this, Error *error)
+static void closeCurrentSegment(FileSplit *this, Error *error)
 {
     if (this->file != NULL)
         fileClose(this->file, error);
@@ -208,7 +213,7 @@ static void closeCurrentSegment(FileSplitFilter *this, Error *error)
 /**
  * Open the segment corresponding to this->position.
  */
-void openCurrentSegment(FileSplitFilter *this, Error *error)
+void openCurrentSegment(FileSplit *this, Error *error)
 {
     /* Close the current segment if opened */
     closeCurrentSegment(this, error);
@@ -225,7 +230,7 @@ void openCurrentSegment(FileSplitFilter *this, Error *error)
 /**
  * We don't transform data, so we just agree with the block sizes of our neighbors.
  */
-size_t fileSplitBlockSize(FileSplitFilter *this, size_t recordSize, Error *error)
+size_t fileSplitBlockSize(FileSplit *this, size_t recordSize, Error *error)
 {
     /* Pass through the size request */
     size_t nextSize = passThroughBlockSize(this, recordSize, error);
@@ -253,10 +258,10 @@ static FilterInterface fileSplitInterface = {
  * @param next - pointer to the next filter in the sequence.
  * @return - a constructed filter for segmenting files.
  */
-FileSplitFilter *fileSplitFilterNew(size_t suggestedSize, PathGetter getPath, void *pathData, void *next)
+FileSplit *fileSplitNew(size_t suggestedSize, PathGetter getPath, void *pathData, void *next)
 {
-    FileSplitFilter *this = malloc(sizeof(FileSplitFilter));
-    *this = (FileSplitFilter) {
+    FileSplit *this = malloc(sizeof(FileSplit));
+    *this = (FileSplit) {
         .getPath = getPath,
         .pathData = pathData,
         .suggestedSize = suggestedSize
