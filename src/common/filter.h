@@ -66,7 +66,7 @@ typedef struct Filter {
 
     /*
      * Passthrough objects, one for each type of event.
-     * We save a pointer to the next object which processes that event,
+     * We cache a pointer to the next object which processes that event,
      * so we don't have to scan ahead looking for them.
      */
     struct Filter *nextOpen;
@@ -77,6 +77,7 @@ typedef struct Filter {
     struct Filter *nextAbort;
     struct Filter *nextBlockSize;
     struct Filter *nextSeek;
+    struct Filter *nextDelete;
 } Filter;
 
 /***********************************************************************************************************************************
@@ -91,6 +92,7 @@ typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
 typedef pos_t (*FilterSeek)(void *this, pos_t position, Error *error);
 typedef size_t (*FilterBlockSize)(void *this, size_t size, Error *error);
+typedef size_t (*FilterDelete)(void *this, char *path, Error *error);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -101,6 +103,7 @@ typedef struct FilterInterface {
     FilterAbort fnAbort;
     FilterBlockSize fnBlockSize;
     FilterSeek fnSeek;
+    FilterDelete fnDelete;
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */

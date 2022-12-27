@@ -18,6 +18,7 @@ size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 size_t fileRead(FileSource *this, Byte *buf, size_t bufSize, Error *error);
 void fileClose(FileSource *this, Error *error);
 pos_t fileSeek(FileSource *this, pos_t position, Error *error);
+void fileDelete(FileSource *this, char *name, Error *error);
 
 /* Formatted write to a file */
 void filePrintf(FileSource *this, Error *error, char *fmt, ...);

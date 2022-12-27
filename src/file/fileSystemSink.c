@@ -134,6 +134,13 @@ pos_t fileSystemSeek(FileSystemSink *this, pos_t position, Error *error)
 }
 
 
+void fileSystemDelete(FileSystemSink *this, char *path, Error *error)
+{
+    Error tempError = errorOK;
+    sys_unlink(path, &tempError);
+
+}
+
 FilterInterface fileSystemInterface = (FilterInterface)
 {
     .fnOpen = (FilterOpen)fileSystemOpen,
@@ -143,7 +150,8 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnSync = (FilterSync)fileSystemSync,
     .fnBlockSize = (FilterBlockSize)fileSystemBlockSize,
     .fnAbort = (FilterAbort)fileSystemAbort,
-    .fnSeek = (FilterSeek)fileSystemSeek
+    .fnSeek = (FilterSeek)fileSystemSeek,
+    .fnDelete = (FilterDelete)fileSystemDelete
 };
 
 

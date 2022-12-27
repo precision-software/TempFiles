@@ -218,6 +218,18 @@ void lz4CompressClose(Lz4Compress *this, Error *error)
 }
 
 
+void lz4CompressDelete(Lz4Compress *this, char *path, Error *error)
+{
+    /* Delete the main data file */
+    passThroughDelete(this, path, error);
+
+    /* Delete the index file as well */
+    char indexPath[MAXPGPATH];
+    strlcpy(indexPath, path, sizeof(indexPath));
+    strlcat(indexPath, ".idx", sizeof(indexPath));
+    passThroughDelete(this, indexPath, error);
+}
+
 /**
  * Compress a block of data from the input buffer to the output buffer.
  * Note the output buffer must be large enough to hold Size(input) bytes.
@@ -280,7 +292,8 @@ FilterInterface lz4CompressInterface = (FilterInterface) {
     .fnRead = (FilterRead)lz4CompressRead,
     .fnWrite = (FilterWrite)lz4CompressWrite,
     .fnSeek = (FilterSeek)lz4CompressSeek,
-    .fnBlockSize = (FilterBlockSize)lz4CompressBlockSize
+    .fnBlockSize = (FilterBlockSize)lz4CompressBlockSize,
+    .fnDelete = (FilterDelete)lz4CompressDelete
 };
 
 

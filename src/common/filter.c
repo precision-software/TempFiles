@@ -27,6 +27,7 @@ void *filterInit(void *thisVoid, FilterInterface *iface, void *next)
     this->nextAbort = getNext(Abort, this);
     this->nextBlockSize = getNext(BlockSize, this);
     this->nextSeek = getNext(Seek, this);
+    this->nextDelete = getNext(Delete, this);
 
     /* Each filter must provide a "Size" routine in its interface. */
     assert(this->iface->fnBlockSize != NULL);

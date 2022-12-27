@@ -14,6 +14,7 @@ size_t sys_write(int fd, Byte *buf, size_t size, Error *error);
 void sys_close(int fd, Error *error);
 void sys_datasync(int fd, Error *error);
 pos_t sys_lseek(int fd, pos_t position, Error *error);
+void sys_unlink(char *path, Error *error);
 
 
 #endif /*FILTER_SYSCALL_H */

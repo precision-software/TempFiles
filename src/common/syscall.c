@@ -124,3 +124,11 @@ pos_t sys_lseek(int fd, pos_t position, Error *error)
     debug("sys_lseek: fd=%d  position=%lld  ret=%lld\n", fd, (off_t)position, ret);
     return (pos_t)ret;
 }
+
+
+void sys_unlink(char *path, Error *error)
+{
+    int ret = unlink(path);
+    if (ret == -1 && errorIsOK(*error))
+        *error = systemError();
+}

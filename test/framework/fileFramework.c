@@ -228,6 +228,14 @@ void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bloc
 }
 
 
+void deleteFile(FileSource *pipe, char *name)
+{
+    Error error = errorOK;
+    fileDelete(pipe, name, &error);
+    PG_ASSERT_OK(error);
+}
+
+
 /* Run a test on a single configuration determined by file size and buffer size */
 void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
@@ -251,7 +259,8 @@ void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t buf
     /* Read back as random reads */
     verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
 
-
+    /* Clean things up */
+    deleteFile(pipe, fileName);
 }
 
 /* run a matrix of tests for various file sizes and I/O sizes.  All will use a 1K block size. */
@@ -282,6 +291,9 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
 
     appendFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize+bufferSize, 16*1024);
+
+    /* Clean things up */
+    deleteFile(pipe, fileName);
 }
 
 
@@ -314,6 +326,9 @@ void singleReadSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t
 
     appendFile(pipe, fileName, fileSize, bufferSize);
     verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
+
+    /* Clean things up */
+    deleteFile(pipe, fileName);
 }
 
 

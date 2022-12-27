@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <sys/fcntl.h>
 #include "common/passThrough.h"
-#include "fileSource.h"
+#include "file/fileSource.h"
 
 struct FileSource {
     Filter filter;
@@ -80,8 +80,13 @@ void fileClose(FileSource *this, Error *error)
         *error = errorOK;
     passThroughClose(this, error);
 
-    /* fclose() does this, but it is dangerous to leave a dangling pointer in our caller */
+    /* Release the memory.  Note we could be leaving a dangling pointer, so callers beware. */
     free(this);
+}
+
+void fileDelete(FileSource *this, char *path, Error *error)
+{
+    passThroughDelete(this, path, error);
 }
 
 

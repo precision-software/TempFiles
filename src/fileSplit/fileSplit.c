@@ -52,6 +52,7 @@ static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File 
 static void closeCurrentSegment(FileSplit *this, Error *error);
 static void openCurrentSegment(FileSplit *this, Error *error);
 pos_t fileSplitSeekEnd(FileSplit *this, Error *error);
+void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *error);
 
 /**
  * Open a set of split files. These are a group of files which, when appended
@@ -85,21 +86,20 @@ FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Erro
         return (filterError(error, "fileSplitOpen: path name too long"), this);
     strcpy(this->name, name);
 
-    /* Position at the beginning of the first segment */
+    /* Position at the beginning of the first segment, possibly truncating it */
     this->position = 0;
     this->file = NULL;
     openCurrentSegment(this, error);
 
-    /* TODO: If truncating, we need to remove subsequent segments. */
-    bool truncate = (oflags & O_TRUNC) == O_TRUNC;
-    if (truncate)
-        debug("FileSplit truncation not implented yet\n");
+    /* If truncating, remove subsequent segments. */
+    if ( (oflags & O_TRUNC) == O_TRUNC)
+        deleteHigherSegments(this, name, 1, error);
 
     /* We may need to create future segments, so add O_CREAT */
     if ((this->oflags & O_ACCMODE) != O_RDONLY)
         this->oflags |= O_CREAT;
 
-    /* We truncated the first segment and removed successive segments. We do NOT want to truncate segments when opening them */
+    /* We truncated the first segment and removed successive segments. We do NOT want to truncate segments when reopening them */
     this->oflags &= ~O_TRUNC;
 
     return this;
@@ -205,6 +205,14 @@ void fileSplitClose(FileSplit *this, Error *error)
     free(this);
 }
 
+/*
+ * Delete the group of files
+ */
+void fileSplitDelete(FileSplit *this, char *name, Error *error)
+{
+    deleteHigherSegments(this, name, 0, error);
+}
+
 /**
  * Close the currently active segment.
  */
@@ -253,7 +261,8 @@ static FilterInterface fileSplitInterface = {
     .fnRead = (FilterRead)fileSplitRead,
     .fnWrite = (FilterWrite)fileSplitWrite,
     .fnSeek = (FilterSeek)fileSplitSeek,
-    .fnBlockSize = (FilterBlockSize)fileSplitBlockSize
+    .fnBlockSize = (FilterBlockSize)fileSplitBlockSize,
+    .fnDelete = (FilterDelete)fileSplitDelete
 };
 
 /**
@@ -274,6 +283,33 @@ FileSplit *fileSplitNew(size_t suggestedSize, PathGetter getPath, void *pathData
     };
     return filterInit(this, &fileSplitInterface, next);
 }
+
+
+bool deleteSegment(FileSplit *this, char *name, size_t segmentIdx, Error *error)
+{
+    char path[PATH_MAX];
+    this->getPath(this->pathData, this->name, segmentIdx, path);
+    passThroughDelete(this, path, error);
+
+    return isError(*error);
+}
+
+
+void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *error)
+{
+    if (isError(*error))
+        return;
+
+    /* Delete segments until a segment can't be deleted - allow some blank spot failures just in case. */
+    for (int failures=0; failures < 10; failures++)
+    {
+        while (deleteSegment(this, this->name, segmentNr, error))
+            segmentNr++;
+        *error = errorOK;
+    }
+}
+
+
 
 /**
  * A typical segment name generator which uses a format statement to combine
