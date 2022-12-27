@@ -16,10 +16,9 @@
 
 /* Forward references */
 static bool isErrorLz4(size_t size, Error *error);
-size_t lz4DecompressBuffer(Lz4Compress *this, Byte *out, size_t outSize, Byte *in, size_t inSize, Error *error);
-size_t lz4CompressBuffer(Lz4Compress *this, Byte *out, size_t outSize, Byte *in, size_t inSize, Error *error);
+size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error);
+size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error);
 size_t compressedSize(size_t size);
-
 
 /* Structure holding the state of our compression/decompression filter. */
 struct Lz4Compress
@@ -28,7 +27,7 @@ struct Lz4Compress
 
     size_t recordSize;                /* Configured size of uncompressed record. */
     size_t compressedSize;            /* upper limit on compressed record size */
-    Byte *compressedBuf;                        /* Buffer to hold compressed data */
+    Byte *compressedBuf;              /* Buffer to hold compressed data */
     size_t bufActual;                 /* The amount of compressed data in buffer */
 
     FileSource *indexFile;            /* Index file created "on the fly" to support record seeks. */
@@ -51,7 +50,6 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode
         return this;
 
     /* Open the index file as well. */
-    /*   FileSource is a dummy wrapper to support "fileRead" and "fileWrite" type functions */
     char indexPath[MAXPGPATH];
     strlcpy(indexPath, path, sizeof(indexPath));
     strlcat(indexPath, ".idx", sizeof(indexPath));
@@ -101,7 +99,7 @@ size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
         filePut8(this->indexFile, this->compressedPosition, error);
     this->previousRead = false;
 
-    /* Compress the record, and write it out as a variable sized record */
+    /* Compress the record and write it out as a variable sized record */
     size_t actual = lz4CompressBuffer(this, this->compressedBuf, this->compressedSize, buf, size, error);
     passThroughWriteSized(this, this->compressedBuf, actual, error);
     if (isError(*error))
