@@ -288,7 +288,7 @@ FileSplit *fileSplitNew(size_t suggestedSize, PathGetter getPath, void *pathData
 bool deleteSegment(FileSplit *this, char *name, size_t segmentIdx, Error *error)
 {
     char path[PATH_MAX];
-    this->getPath(this->pathData, this->name, segmentIdx, path);
+    this->getPath(this->pathData, name, segmentIdx, path);
     passThroughDelete(this, path, error);
 
     return isError(*error);
@@ -300,12 +300,17 @@ void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *
     if (isError(*error))
         return;
 
-    /* Delete segments until a segment can't be deleted - allow some blank spot failures just in case. */
+    /* Delete segments, allowing some failures just in case there are missing segments */
     for (int failures=0; failures < 10; failures++)
     {
-        while (deleteSegment(this, this->name, segmentNr, error))
-            segmentNr++;
-        *error = errorOK;
+
+        /* Remove successive segments until an error occurs */
+        while (!deleteSegment(this, name, segmentNr++, error))
+            ;
+
+        /* If the error was "file not found", then things are OK. We can stop if we want to */
+        if (error->code == -ENOENT)
+            *error = errorOK;
     }
 }
 

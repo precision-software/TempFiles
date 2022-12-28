@@ -129,6 +129,7 @@ pos_t sys_lseek(int fd, pos_t position, Error *error)
 void sys_unlink(char *path, Error *error)
 {
     int ret = unlink(path);
-    if (ret == -1 && errorIsOK(*error))
-        *error = systemError();
+    if (ret == -1)
+        setError(error, systemError());
+    debug("sys_unlink: path=%s  msg=%s\n", path, error->msg);
 }

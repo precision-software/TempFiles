@@ -136,8 +136,10 @@ pos_t fileSystemSeek(FileSystemSink *this, pos_t position, Error *error)
 
 void fileSystemDelete(FileSystemSink *this, char *path, Error *error)
 {
+    /* Unlink the file, even if we've already had an error */
     Error tempError = errorOK;
     sys_unlink(path, &tempError);
+    setError(error, tempError);
 
 }
 
