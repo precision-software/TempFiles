@@ -297,11 +297,8 @@ bool deleteSegment(FileSplit *this, char *name, size_t segmentIdx, Error *error)
 
 void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *error)
 {
-    if (isError(*error))
-        return;
-
     /* Delete segments, allowing some failures just in case there are missing segments */
-    for (int failures=0; failures < 10; failures++)
+    for (int failures=0; failures < 10 && errorIsOK(*error); failures++)
     {
 
         /* Remove successive segments until an error occurs */
@@ -313,7 +310,6 @@ void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *
             *error = errorOK;
     }
 }
-
 
 
 /**
