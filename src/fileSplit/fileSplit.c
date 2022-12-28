@@ -128,11 +128,18 @@ size_t fileSplitRead(FileSplit *this, Byte *buf, size_t size, Error *error)
     return actual;
 }
 
+/*
+ * Seek to the equivialent position in the proper file segment
+ */
 pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
 {
     /* Special case for seeking to end */
     if (position == FILE_END_POSITION)
         return fileSplitSeekEnd(this, error);
+
+    /* We must seek to a record boundary */
+    if ( (position % this->recordSize) == 0)
+        return filterError(error, "fileSplit must seek to a record boundary");
 
     pos_t oldPosition =  this->position;
     this->position = position;
