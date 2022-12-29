@@ -126,7 +126,7 @@ size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
     }
 
     /* If buffer is empty, position is aligned, and the data exceeds block size, write direct to next stage */
-    if (this->buf == NULL || this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
+    if (this->blockActual == 0 && this->position == this->blockPosition && size >= this->blockSize)
         return directWrite(this, buf, size, error);
 
     /* If buffer is empty ... */
@@ -153,6 +153,9 @@ size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
 }
 
 
+/*
+ * Optimize writes by going directly to the next file if we don't need buffering.
+ */
 size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error)
 {
     /* Write out multiple records, but no partials */
@@ -191,8 +194,8 @@ size_t bufferedRead(Buffered *this, Byte *buf, size_t size, Error *error)
         this->blockActual = 0;
     }
 
-    /* Optimization. See if we skip our buffer and talk directly to the next stage */
-    if (this->buf == NULL || this->position == this->blockPosition && size > this->blockSize && this->blockActual == 0)
+    /* Optimization. See if we can skip our buffer and talk directly to the next stage */
+    if (this->position == this->blockPosition && size > this->blockSize && this->blockActual == 0)
         return directRead(this, buf, size, error);
 
         /* If our buffer is empty fill it in.  Exit on error or EOF */
@@ -323,9 +326,8 @@ size_t bufferedBlockSize(Buffered *this, size_t prevSize, Error *error)
     /* Our actual size will be a multiple of the requested size */
     this->blockSize = sizeRoundUp(suggestedSize, requestedSize);
 
-    /* Resize the buffer we created during Open() . */
-    flushBuffer(this, error);
-    this->buf = realloc(this->buf, this->blockSize);
+    /* Allocate a buffer of the negotiated size. */
+    this->buf = malloc(this->blockSize);
     this->blockActual = 0;
 
     /* We are buffering, so tell the caller we can accept any size. */

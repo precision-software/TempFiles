@@ -62,7 +62,7 @@ void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *
  * @param oflags - The "O_flags" used to open the file
  * @param perm   - If creating a file, the Posix style permissions of the new file.
  * @param error  - Error handling, both input and output.
- * @return       - An handle which can be used to access the opened file.
+ * @return       - A handle which can be used to access the opened file.
  */
 FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Error *error)
 {
@@ -99,7 +99,10 @@ FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Erro
     if ((this->oflags & O_ACCMODE) != O_RDONLY)
         this->oflags |= O_CREAT;
 
-    /* We truncated the first segment and removed successive segments. We do NOT want to truncate segments when reopening them */
+    /*
+     * We have already truncated the first segment and removed successive segments.
+     * We do NOT want to truncate segments when reopening them
+     */
     this->oflags &= ~O_TRUNC;
 
     return this;
@@ -134,6 +137,7 @@ pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
     if (position == FILE_END_POSITION)
         return fileSplitSeekEnd(this, error);
 
+    /* Set the new seek position */
     pos_t oldPosition =  this->position;
     this->position = position;
 
@@ -148,6 +152,9 @@ pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
     return position;
 }
 
+/*
+ * Special case of seeking to the end of the file set.
+ */
 pos_t fileSplitSeekEnd(FileSplit *this, Error *error)
 {
     /* Scan looking for last (partial) segment */
