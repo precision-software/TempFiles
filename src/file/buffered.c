@@ -15,7 +15,7 @@
  *    2) All I/Os transfer an entire block, except for the final block in the file.
  *    3) The actual file is pre-positioned for the next I/O.
  *       a) If the buffer is partial or dirty, the actual file position matches bufPosition.
- *       b) If the buffer is full of clean data, the actual file position matches bufPosition+cipherSize.
+ *       b) If the buffer is full of clean data, the actual file position matches bufPosition+encryptSize.
  *
  *  One goal is to ensure purely sequential reads/writes do not require Seek operations.
  *
@@ -41,7 +41,7 @@ struct Buffered
     Filter filter;        /* Common to all filters */
     size_t suggestedSize; /* The suggested buffer size. We may make it a bit bigger */
 
-    size_t recordSize;     /* The size of blocks we read/write to our successor. */
+    size_t blockSize;     /* The size of blocks we read/write to our successor. */
     Byte *buf;            /* Local buffer, precisely one block in size. */
     bool dirty;           /* Does the buffer contain dirty data? */
 
@@ -97,7 +97,7 @@ Buffered *bufferedOpen(Buffered *pipe, char *path, int oflags, int perm, Error *
     this->fileSize = 0;
     this->sizeConfirmed = (oflags & O_TRUNC) == O_TRUNC;
 
-    /* We don't know record size yet, so we will allocate buffer in the Size event */
+    /* We don't know block size yet, so we will allocate buffer in the Size event */
     this->buf = NULL;
 
     return this;
@@ -115,18 +115,18 @@ size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
         return 0;
 
     /* If we are at end of current buffer. */
-    if (this->position == this->bufPosition + this->recordSize)
+    if (this->position == this->bufPosition + this->blockSize)
     {
         /* Clean the buffer if dirty */
         flushBuffer(this, error);
 
         /* Move to the next block (with empty buffer) */
-        this->bufPosition += this->recordSize;
+        this->bufPosition += this->blockSize;
         this->bufActual = 0;
     }
 
     /* If buffer is empty, position is aligned, and the data exceeds block size, write direct to next stage */
-    if (this->bufActual == 0 && this->position == this->bufPosition && size >= this->recordSize)
+    if (this->bufActual == 0 && this->position == this->bufPosition && size >= this->blockSize)
         return directWrite(this, buf, size, error);
 
     /* If buffer is empty ... */
@@ -158,13 +158,13 @@ size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
  */
 size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error)
 {
-    /* Write out multiple records, but no partials */
-    size_t alignedSize = sizeRoundDown(size, this->recordSize);
+    /* Write out multiple blocks, but no partials */
+    size_t alignedSize = sizeRoundDown(size, this->blockSize);
     size_t actual = passThroughWriteAll(this, buf, alignedSize, error);
 
     /* Update positions */
     this->position += actual;
-    this->bufPosition = sizeRoundDown(this->position, this->recordSize);
+    this->bufPosition = sizeRoundDown(this->position, this->blockSize);
 
     return actual;
 }
@@ -175,7 +175,7 @@ size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error)
  */
 size_t bufferedRead(Buffered *this, Byte *buf, size_t size, Error *error)
 {
-    debug("bufferedRead: position=%zu size=%zu cipherSize=%zu\n", this->position, size, this->recordSize);
+    debug("bufferedRead: position=%zu size=%zu encryptSize=%zu\n", this->position, size, this->blockSize);
     if (!errorIsOK(*error))
         return 0;
 
@@ -183,19 +183,19 @@ size_t bufferedRead(Buffered *this, Byte *buf, size_t size, Error *error)
     if (this->position == this->bufPosition + this->bufActual && this->bufActual > 0)
     {
         /* If the buffer is partial, then we are EOF */
-        if (this->bufActual < this->recordSize)
+        if (this->bufActual < this->blockSize)
             return setError(error, errorEOF);
 
         /* Clean the buffer if dirty */
         flushBuffer(this, error);
 
         /* Advance to the next buffer position, with an empty buffer */
-        this->bufPosition += this->recordSize;
+        this->bufPosition += this->blockSize;
         this->bufActual = 0;
     }
 
     /* Optimization. See if we can skip our buffer and talk directly to the next stage */
-    if (this->position == this->bufPosition && size > this->recordSize && this->bufActual == 0)
+    if (this->position == this->bufPosition && size > this->blockSize && this->bufActual == 0)
         return directRead(this, buf, size, error);
 
         /* If our buffer is empty fill it in.  Exit on error or EOF */
@@ -214,13 +214,13 @@ size_t bufferedRead(Buffered *this, Byte *buf, size_t size, Error *error)
 
 size_t directRead(Buffered *this, Byte *buf, size_t size, Error *error)
 {
-    debug("directRead: size=%zu  position=%zu cipherSize=%zu\n", size, this->position, this->recordSize);
-    /* Read multiple records, but no partials */
-    size_t alignedSize = sizeRoundDown(size, this->recordSize);
+    debug("directRead: size=%zu  position=%zu encryptSize=%zu\n", size, this->position, this->blockSize);
+    /* Read multiple blocks, but no partials */
+    size_t alignedSize = sizeRoundDown(size, this->blockSize);
     size_t actual = passThroughReadAll(this, buf, alignedSize, error);
 
     /* If we read a partial block, claw it back from the caller's buffer */
-    size_t actualPartial = actual % this->recordSize;
+    size_t actualPartial = actual % this->blockSize;
     size_t actualBlock = actual - actualPartial;
     if (actualPartial > 0)
         copyIn(this, buf+actualBlock, actualPartial);
@@ -258,7 +258,7 @@ size_t bufferedSeek(Buffered *this, size_t position, Error *error)
     }
 
     /* If we are moving to a different block ... */
-    size_t newBlock = sizeRoundDown(position, this->recordSize);
+    size_t newBlock = sizeRoundDown(position, this->blockSize);
     debug("bufferedSeek: position=%zu  newBlock=%zu bufPosition=%zu\n", position, newBlock, this->bufPosition);
     if (newBlock != this->bufPosition)
     {
@@ -324,10 +324,10 @@ size_t bufferedBlockSize(Buffered *this, size_t prevSize, Error *error)
     size_t requestedSize = passThroughBlockSize(this, suggestedSize, error);
 
     /* Our actual size will be a multiple of the requested size */
-    this->recordSize = sizeRoundUp(suggestedSize, requestedSize);
+    this->blockSize = sizeRoundUp(suggestedSize, requestedSize);
 
     /* Allocate a buffer of the negotiated size. */
-    this->buf = malloc(this->recordSize);
+    this->buf = malloc(this->blockSize);
     this->bufActual = 0;
 
     /* We are buffering, so tell the caller we can accept any size. */
@@ -398,7 +398,7 @@ static bool fillBuffer (Buffered *this, Error *error)
     /* TODO */
 
     /* Read in the current buffer */
-    this->bufActual = passThroughReadAll(this, this->buf, this->recordSize, error);
+    this->bufActual = passThroughReadAll(this, this->buf, this->blockSize, error);
 
     /* if EOF or partial read, update the known file size */
     /* TODO: */
@@ -412,7 +412,7 @@ static size_t copyIn(Buffered *this, Byte *buf, size_t size)
 {
     /* Copy bytes into the buffer, up to end of data or end of buffer */
     size_t offset = this->position - this->bufPosition;
-    size_t actual = sizeMin(this->recordSize - offset, size);
+    size_t actual = sizeMin(this->blockSize - offset, size);
     memcpy(this->buf + offset, buf, actual);
     debug("copyIn: size=%zu bufPosition=%zu bufActual=%zu offset=%zu  actual=%zu\n",
           size, this->bufPosition, this->bufActual, offset, actual);
@@ -421,7 +421,7 @@ static size_t copyIn(Buffered *this, Byte *buf, size_t size)
     if (actual + offset > this->bufActual)
         this->bufActual = actual + offset;
 
-    assert(this->bufActual <= this->recordSize);
+    assert(this->bufActual <= this->blockSize);
     return actual;
 }
 

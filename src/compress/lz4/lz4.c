@@ -10,8 +10,8 @@
 #include "compress/lz4/lz4.h"
 #include "common/error.h"
 #include "common/passThrough.h"
-#include "file/fileSource.h"
-#include "file/fileSystemSink.h"
+#include "file/ioStack.h"
+#include "file/fileSystemBottom.h"
 #include "file/buffered.h"
 
 /* Forward references */
@@ -25,13 +25,13 @@ struct Lz4Compress
 {
     Filter filter;
 
-    size_t recordSize;                /* Configured size of uncompressed record. */
-    size_t compressedSize;            /* upper limit on compressed record size */
+    size_t blockSize;                /* Configured size of uncompressed block. */
+    size_t compressedSize;            /* upper limit on compressed block size */
     Byte *compressedBuf;              /* Buffer to hold compressed data */
     size_t bufActual;                 /* The amount of compressed data in buffer */
 
-    FileSource *indexFile;            /* Index file created "on the fly" to support record seeks. */
-    pos_t compressedPosition;         /* The offset of the current compressed record within the compressed file */
+    IoStack *indexFile;            /* Index file created "on the fly" to support block seeks. */
+    pos_t compressedPosition;         /* The offset of the current compressed block within the compressed file */
 
     Byte *tempBuf;                    /* temporary buffer to hold decompressed data when probing for size */
 
@@ -45,7 +45,7 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode
 
     /* Open the compressed file and clone ourselves */
     Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
-    Lz4Compress *this = lz4CompressNew(pipe->recordSize, next);
+    Lz4Compress *this = lz4CompressNew(pipe->blockSize, next);
     if (isError(*error))
         return this;
 
@@ -53,13 +53,13 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode
     char indexPath[MAXPGPATH];
     strlcpy(indexPath, path, sizeof(indexPath));
     strlcat(indexPath, ".idx", sizeof(indexPath));
-    this->indexFile = fileSourceNew(passThroughOpen(this, indexPath, oflags, mode, error));
+    this->indexFile = ioStackNew(passThroughOpen(this, indexPath, oflags, mode, error));
 
     /* Make note we are at the start of the compressed file */
     this->compressedPosition = 0;
     this->previousRead = true;
 
-    /* Do we want to write a file header containing the record size? */
+    /* Do we want to write a file header containing the block size? */
     /* TODO: later. */
 
     return this;
@@ -67,39 +67,39 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode
 
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 {
-    /* Starting with the index file, we send 4 byte records */
+    /* Starting with the index file, we send 4 byte blocks */
     size_t indexSize = passThroughBlockSize(this->indexFile, sizeof(pos_t), error);
     if (sizeof(pos_t) % indexSize != 0)
-        return filterError(error, "lz4 index file has incompatible record size");
+        return filterError(error, "lz4 index file has incompatible block size");
 
-    /* For our data file, we send variable sized records to the next stage, so treat as byte stream. */
+    /* For our data file, we send variable sized blocks to the next stage, so treat as byte stream. */
     size_t nextSize = passThroughBlockSize(this, 1, error);
     if (nextSize != 1)
-        return filterError(error, "lz4 Compression has mismatched record size");
+        return filterError(error, "lz4 Compression has mismatched block size");
 
-    /* Allocate a buffer to hold a compressed record */
-    this->compressedSize = compressedSize(this->recordSize);
+    /* Allocate a buffer to hold a compressed block */
+    this->compressedSize = compressedSize(this->blockSize);
     this->compressedBuf = malloc(this->compressedSize);
-    this->tempBuf = malloc(this->recordSize);
+    this->tempBuf = malloc(this->blockSize);
 
-    /* Our caller should send us records of this size. */
-    return this->recordSize;
+    /* Our caller should send us blocks of this size. */
+    return this->blockSize;
 }
 
 
 size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
-    /* We do one record at a time */
-    size = sizeMin(size, this->recordSize);
+    /* We do one block at a time */
+    size = sizeMin(size, this->blockSize);
 
     debug("lz4Write: size=%zu  compressedPosition=%llu\n", size, this->compressedPosition);
 
-    /* If previous read, synchronize the index by writing out offset to start of current record */
+    /* If previous read, synchronize the index by writing out offset to start of current block */
     if (this->previousRead)
         filePut8(this->indexFile, this->compressedPosition, error);
     this->previousRead = false;
 
-    /* Compress the record and write it out as a variable sized record */
+    /* Compress the block and write it out as a variable sized record */
     size_t actual = lz4CompressBuffer(this, this->compressedBuf, this->compressedSize, buf, size, error);
     passThroughWriteSized(this, this->compressedBuf, actual, error);
     if (isError(*error))
@@ -109,7 +109,7 @@ size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
     this->compressedPosition += (actual + 4);
 
     /* If we wrote a full block, write out an index entry */
-    if (size == this->recordSize)
+    if (size == this->blockSize)
         filePut8(this->indexFile, this->compressedPosition, error);
 
     return size;
@@ -118,7 +118,7 @@ size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
 {
     /* We do one record at a time */
-    size = sizeMin(size, this->recordSize);
+    size = sizeMin(size, this->blockSize);
 
     debug("lz4Read: size=%zu  compressedPosition=%llu\n", size, this->compressedPosition);
     if (isError(*error))
@@ -159,16 +159,16 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
             return 0;
 
         /* Seek to the final partial record, if any */
-        pos_t lastPosition = (nrRecords-1) * this->recordSize;
+        pos_t lastPosition = (nrRecords-1) * this->blockSize;
         lz4CompressSeek(this, lastPosition, error);
 
         /* read the final partial record, treating EOF like a zero length partial record */
-        size_t lastSize = lz4CompressRead(this, this->tempBuf, this->recordSize, error);
+        size_t lastSize = lz4CompressRead(this, this->tempBuf, this->blockSize, error);
         if (errorIsEOF(*error))
             *error = errorOK;
 
         /* If the last record was partial, then go back to its starting position. */
-        if (errorIsOK(*error) && lastSize < this->recordSize)
+        if (errorIsOK(*error) && lastSize < this->blockSize)
             lz4CompressSeek(this, lastPosition, error);
 
         debug("lz4Seek (end of  file): lastPosition=%llu lastSize=%zu  compressedPosition=%llu\n", lastPosition, lastSize, this->compressedPosition);
@@ -179,11 +179,11 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
 
     /* otherwise, seeking to a file position */
     /* Verify we are seeking to a record boundary */
-    if (position % this->recordSize != 0)
+    if (position % this->blockSize != 0)
         return filterError(error, "l14 Compression - must seek to a block boundary");
 
     /* Read from the index to get the position in the compressed file. */
-    size_t recordNr = position / this->recordSize;
+    size_t recordNr = position / this->blockSize;
     fileSeek(this->indexFile, recordNr*8, error);
     this->compressedPosition = fileGet8(this->indexFile, error);
 
@@ -299,12 +299,12 @@ FilterInterface lz4CompressInterface = (FilterInterface) {
 
 /**
  * Create a filter for writing and reading compressed files.
- * @param recordSize - size of individually compressed records.
+ * @param blockSize - size of individually compressed records.
  */
-Lz4Compress *lz4CompressNew(size_t recordSize, void *next)
+Lz4Compress *lz4CompressNew(size_t blockSize, void *next)
 {
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
-    *this = (Lz4Compress){.recordSize = recordSize};
+    *this = (Lz4Compress){.blockSize = blockSize};
     filterInit(this, &lz4CompressInterface, next);
     return this;
 }

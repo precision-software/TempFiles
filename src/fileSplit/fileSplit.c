@@ -26,7 +26,7 @@
 #include "common/debug.h"
 #include "common/passThrough.h"
 #include "fileSplit/fileSplit.h"
-#include "file/fileSource.h"
+#include "file/ioStack.h"
 
 /* Structure defining the state for read/writing a group of split files */
 struct FileSplit
@@ -44,7 +44,7 @@ struct FileSplit
     char name[PATH_MAX];  /* Name of the overall file set, used to calculate segment names. */
     int oflags;           /* The mode we open each segment in. */
     int perm;             /* If creating files, use this permission. */
-    FileSource *file;     /* points to the current open file segment, null otherwise */
+    IoStack *file;     /* points to the current open file segment, null otherwise */
 };
 
 static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
@@ -245,19 +245,19 @@ void openCurrentSegment(FileSplit *this, Error *error)
     this->getPath(this->pathData, this->name, segmentIdx, path);
 
     /* Open the new file segment. */
-    this->file = fileSourceNew(passThroughOpen(this, path, this->oflags, this->perm, error));
+    this->file = ioStackNew(passThroughOpen(this, path, this->oflags, this->perm, error));
 }
 
 /**
  * We don't transform data, so we just agree with the block sizes of our neighbors.
  */
-size_t fileSplitBlockSize(FileSplit *this, size_t recordSize, Error *error)
+size_t fileSplitBlockSize(FileSplit *this, size_t blockSize, Error *error)
 {
     /* Pass through the size request */
-    size_t nextSize = passThroughBlockSize(this, recordSize, error);
+    size_t nextSize = passThroughBlockSize(this, blockSize, error);
 
-    /* Round up the segment size to contain an even number of records */
-    this->segmentSize = sizeRoundUp(this->suggestedSize, recordSize);
+    /* Round up the segment size to contain an even number of blocks */
+    this->segmentSize = sizeRoundUp(this->suggestedSize, blockSize);
 
     return nextSize;
 }

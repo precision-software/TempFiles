@@ -32,11 +32,11 @@ void aeadCipherSetup(AeadFilter *this, char *cipherName, Error *error);
 void aeadConfigure(AeadFilter *this, Error *error);
 void aeadHeaderRead(AeadFilter *this, Error *error);
 void aeadHeaderWrite(AeadFilter *this, Error *error);
-size_t paddingSize(AeadFilter *this, size_t recordSize);
+size_t paddingSize(AeadFilter *this, size_t blockSize);
 pos_t aeadFilterSeek(AeadFilter *this, pos_t position, Error *error);
 
 /**
- * Converter structure for encrypting and decrypting TLS Records.
+ * Converter structure for encrypting and decrypting TLS Blocks.
  */
 #define MAX_CIPHER_NAME 64
 #define MAX_AEAD_HEADER_SIZE 1024
@@ -48,33 +48,33 @@ struct AeadFilter
     /* Configuration */
     Byte key[EVP_MAX_KEY_LENGTH];       /* The key for encrypting/decrypting */
     char cipherName[MAX_CIPHER_NAME];   /* The name of the cipher, if encrypting a new file. */
-    size_t plainSize;                   /* The plaintext record size, if encrypting a new file */
+    size_t plainSize;                   /* The plaintext block size, if encrypting a new file */
 
     /* Cipher State (based on the encryption algorithm) */
     size_t keySize;              /* The size of the key in bytes */
-    size_t ivSize;               /* Size of the initialization vector, typically same as cipherSize */
-    size_t blockSize;            /* Size of the cipher block. (typically 16 bytes for AES) */
-    size_t tagSize;              /* Size of the MAC tag to authenticate the encrypted record. */
-    bool hasPadding;             /* Whether cipher block padding is added to the encrypted records */
-    Byte iv[EVP_MAX_IV_LENGTH];  /* The initialization vector for the sequence of records. */
+    size_t ivSize;               /* Size of the initialization vector, typically same as encryptSize */
+    size_t cipherBlockSize;      /* Size of the cipher block. (typically 16 bytes for AES) */
+    size_t tagSize;              /* Size of the MAC tag to authenticate the encrypted block. */
+    bool hasPadding;             /* Whether cipher block padding is added to the encrypted blocks */
+    Byte iv[EVP_MAX_IV_LENGTH];  /* The initialization vector for the sequence of blocks. */
     EVP_CIPHER *cipher;          /* The libcrypto cipher structure */
     EVP_CIPHER_CTX *ctx;         /* libcrypto context. */
 
     /* Our state */
     size_t headerSize;            /* Size of the header we read/wrote to the encrypted file */
-    size_t recordNr;              /* The record sequence number, starting at 0 and incrementing. */
-    size_t cipherSize;            /* The size of the encrypted records */
-    Byte *cipherBuf;                    /* Buffer to hold the current encrypted block */
+    size_t blockNr;               /* The block sequence number, starting at 0 and incrementing. */
+    size_t encryptSize;           /* The size of the encrypted blocks */
+    Byte *cipherBuf;              /* Buffer to hold the current encrypted block */
     bool readable;
     bool writable;
 
-    /* Our plaintext positions used to decide if we need to add zero length record at end. */
+    /* Our plaintext positions used to decide if we need to add zero length block at end. */
     pos_t fileSize;               /* (MAX if unknown, 0 if truncated, actual otherwise) */
     pos_t position;
     pos_t maxReadPosition;        /* Biggest position after reading */
     pos_t maxWritePosition;       /* Biggest position after writing */
 
-    Byte *plainBuf;                /* A buffer to temporarily hold a decrypted record */
+    Byte *plainBuf;                /* A buffer to temporarily hold a decrypted block */
 };
 
 
@@ -106,8 +106,8 @@ AeadFilter *aeadFilterOpen(AeadFilter *pipe, char *path, int oflags, int mode, E
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
 
-    /* Note we are positioned at the first record and we've done no I/O so far. */
-    this->recordNr = 0;
+    /* Note we are positioned at the first block and we've done no I/O so far. */
+    this->blockNr = 0;
     this->maxReadPosition = 0;
     this->maxWritePosition = 0;
     this->fileSize = (oflags & O_TRUNC)? 0 : FILE_END_POSITION;
@@ -127,7 +127,7 @@ size_t aeadFilterRead(AeadFilter *this, Byte *buf, size_t size, Error *error)
     debug("aeadFilterRead: size=%zu  position=%llu maxWrite=%llu maxRead=%llu fileSize=%lld\n",
           size, this->position, this->maxWritePosition, this->maxReadPosition, (off_t)this->fileSize);
     /* Read a block of downstream encrypted text into our buffer. */
-    size_t actual = passThroughReadAll(this, this->cipherBuf, this->cipherSize, error);
+    size_t actual = passThroughReadAll(this, this->cipherBuf, this->encryptSize, error);
     if (isError(*error))
         return 0;
 
@@ -147,7 +147,7 @@ size_t aeadFilterRead(AeadFilter *this, Byte *buf, size_t size, Error *error)
     if (plainSize < this->plainSize)
         this->fileSize = this->position;
 
-    /* If partial record, probe to make sure the file is really EOF. */
+    /* If partial block, probe to make sure the file is really EOF. */
     if (plainSize < this->plainSize)
     {
         passThroughRead(this, this->cipherBuf, 1, error);
@@ -156,16 +156,16 @@ size_t aeadFilterRead(AeadFilter *this, Byte *buf, size_t size, Error *error)
         *error = errorOK;
     }
 
-    /* If the partial record was empty, then we're at EOF now */
+    /* If the partial block was empty, then we're at EOF now */
     if (plainSize == 0)
         return setError(error, errorEOF);
 
     /* Track our position for EOF handling */
-    this->maxReadPosition = sizeMax(this->maxReadPosition, this->recordNr * this->plainSize + plainSize);
+    this->maxReadPosition = sizeMax(this->maxReadPosition, this->blockNr * this->plainSize + plainSize);
 
-    /* Bump the record sequence number if full block read */
+    /* Bump the block sequence number if full block read */
     if (plainSize == this->plainSize)
-        this->recordNr++;
+        this->blockNr++;
 
     /* Return the number of plaintext bytes read. */
     return plainSize;
@@ -188,7 +188,7 @@ size_t aeadFilterWrite(AeadFilter *this, Byte *buf, size_t size, Error *error)
     /* Encrypt one record of data into our buffer */
     Byte tag[EVP_MAX_MD_SIZE];
     size_t plainSize = sizeMin(size, this->plainSize);
-    size_t cipherSize = aead_encrypt(this, buf, plainSize, NULL, 0, this->cipherBuf, this->cipherSize - this->tagSize, tag, error);
+    size_t cipherSize = aead_encrypt(this, buf, plainSize, NULL, 0, this->cipherBuf, this->encryptSize - this->tagSize, tag, error);
 
     /* Append the tag to the encrypted data */
     memcpy(this->cipherBuf + cipherSize, tag, this->tagSize);
@@ -205,7 +205,7 @@ size_t aeadFilterWrite(AeadFilter *this, Byte *buf, size_t size, Error *error)
     /* TODO: verify partial write is at end of file */
 
     /* We have just advanced to the next block. */
-    this->recordNr++;
+    this->blockNr++;
 
     return plainSize;
 }
@@ -235,7 +235,7 @@ void aeadFilterClose(AeadFilter *this, Error *error)
     {
         /* CASE: NO. downstream file size is bigger than our highest write. (PADDING PROBLEMS!)*/
         size_t actualSize = passThroughSeek(this, FILE_END_POSITION, error);
-        size_t expectedSize = this->maxWritePosition / this->plainSize * this->cipherSize + this->headerSize;
+        size_t expectedSize = this->maxWritePosition / this->plainSize * this->encryptSize + this->headerSize;
         if (actualSize > expectedSize)
             ;
 
@@ -281,13 +281,13 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
 
         /* Position self at beginning of last record */
         if (dataSize % this->plainSize == 0)
-            dataSize = dataSize - this->cipherSize;
-        dataSize = sizeRoundDown(dataSize, this->cipherSize);
+            dataSize = dataSize - this->encryptSize;
+        dataSize = sizeRoundDown(dataSize, this->encryptSize);
         passThroughSeek(this, this->headerSize + dataSize, error);
 
         /* update our plaintext position. */
-        this->recordNr = dataSize / this->cipherSize;
-        this->position = this->recordNr * this->plainSize;
+        this->blockNr = dataSize / this->encryptSize;
+        this->position = this->blockNr * this->plainSize;
 
         /* Read and decrypt the last record. Because of possible padding, we need to decrypt to determine size. */
         partialSize = aeadFilterRead(this, this->plainBuf, this->plainSize, error);
@@ -298,7 +298,7 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
 
         /* Now we know the position we really want - end of last full block. */
         /*  and we know the size of the last partial block */
-        plainPosition = this->recordNr * this->plainSize;
+        plainPosition = this->blockNr * this->plainSize;
     }
 
     /* Verify we are seeking to a block boundary */
@@ -306,10 +306,10 @@ pos_t aeadFilterSeek(AeadFilter *this, pos_t plainPosition, Error *error)
         return filterError(error, "Must seek to a block boundary");
 
     /* Set the new block number and go there in the downstream file. */
-    this->recordNr = plainPosition / this->plainSize;
+    this->blockNr = plainPosition / this->plainSize;
     this->position = plainPosition;
-    pos_t cipherPosition = this->headerSize + this->recordNr * this->cipherSize;
-    debug("aeadSeek: plainPosition=%llu  cipherPosition=%llu recordNr=%zu\n", plainPosition, cipherPosition, this->recordNr);
+    pos_t cipherPosition = this->headerSize + this->blockNr * this->encryptSize;
+    debug("aeadSeek: plainPosition=%llu  cipherPosition=%llu blockNr=%zu\n", plainPosition, cipherPosition, this->blockNr);
     passThroughSeek(this, cipherPosition, error);
 
     /* Return the new plainPosition, adding in partialSize if requesting FILE_END_POSITION */
@@ -328,10 +328,10 @@ size_t aeadFilterBlockSize(AeadFilter *this, size_t plainSize, Error *error)
     aeadConfigure(this, error);
 
     /* Our plaintext block size is fixed. Calculate the corresponding encrypted size. */
-    this->cipherSize = this->plainSize + paddingSize(this, this->plainSize) + this->tagSize;
+    this->encryptSize = this->plainSize + paddingSize(this, this->plainSize) + this->tagSize;
 
     /* Allocate buffers to hold records of encrypted/decrypted data. */
-    this->cipherBuf = malloc(this->cipherSize);
+    this->cipherBuf = malloc(this->encryptSize);
     this->plainBuf = malloc(this->plainSize); /* Big enough to hold header */
 
     /* Tell the previous stage they must accommodate our plaintext block size. */
@@ -373,7 +373,7 @@ AeadFilter *aeadFilterNew(char *cipherName, size_t recordSize, Byte *key, size_t
 void aeadConfigure(AeadFilter *this,  Error *error)
 {
     /* We use a special record number for headers */
-    this->recordNr = HEADER_SEQUENCE_NUMBER;
+    this->blockNr = HEADER_SEQUENCE_NUMBER;
 
     /* Try to read an existing header */
     aeadHeaderRead(this, error);
@@ -387,8 +387,8 @@ void aeadConfigure(AeadFilter *this,  Error *error)
     else if (isError(*error))
         filterError(error, "AEAD encryption can't read header");
 
-    /* Start the first data record with sequence number zero */
-    this->recordNr = 0;
+    /* Start the first data block with sequence number zero */
+    this->blockNr = 0;
 }
 
 
@@ -460,7 +460,7 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
          header, validateSize, emptyBlock, emptySize, tag, error);
 
     /* Calculate the ciphertext size for a full plaintext record */
-    this->cipherSize = this->plainSize + paddingSize(this, this->plainSize) + this->tagSize;
+    this->encryptSize = this->plainSize + paddingSize(this, this->plainSize) + this->tagSize;
 }
 
 
@@ -546,8 +546,8 @@ void aeadCipherSetup(AeadFilter *this, char *cipherName, Error *error)
     this->ivSize = EVP_CIPHER_iv_length(this->cipher);
     if (this->keySize != EVP_CIPHER_key_length(this->cipher))
         return (void)filterError(error, "Cipher key is the wrong size");
-    this->blockSize = EVP_CIPHER_block_size(this->cipher);
-    this->hasPadding = (this->blockSize != 1);
+    this->cipherBlockSize = EVP_CIPHER_block_size(this->cipher);
+    this->hasPadding = (this->cipherBlockSize != 1);
     this->tagSize = 16;  /* TODO: EVP_CIPHER_CTX_get_tag_length(this->ctx); But only after initialized. */
 }
 
@@ -558,7 +558,7 @@ void aeadCipherSetup(AeadFilter *this, char *cipherName, Error *error)
 size_t paddingSize(AeadFilter *this, size_t recordSize)
 {
     return (this->hasPadding)
-       ? this->blockSize - (recordSize % this->blockSize)
+       ? this->cipherBlockSize - (recordSize % this->cipherBlockSize)
        : 0;
 }
 
@@ -571,7 +571,7 @@ size_t paddingSize(AeadFilter *this, size_t recordSize)
  *  @param header - text to be authenticated but not encrypted.
  *  @param headerSize - size of header. If 0, then header can be NULL.
  *  @param cipherText - the output encrypted text
- *  @param cipherSize - the size of the buffer on input, actual size on output.
+ *  @param encryptSize - the size of the buffer on input, actual size on output.
  *  @param tag - the output MAC tag of size this->tagSize
  *  @param error - Keep track of errors.
  *  @return - the actual size of the encrypted ciphertext.
@@ -592,9 +592,9 @@ aead_encrypt(AeadFilter *this,
 
     /* Generate nonce by XOR'ing the initialization vector with the sequence number */
     Byte nonce[EVP_MAX_IV_LENGTH];
-    generateNonce(nonce, this->iv, this->ivSize, this->recordNr);
-    debug("Encrypt: iv=%s  recordNr=%zu  nonce=%s  key=%s\n",
-          asHex(this->iv, this->ivSize), this->recordNr, asHex(nonce, this->ivSize), asHex(this->key, this->keySize));
+    generateNonce(nonce, this->iv, this->ivSize, this->blockNr);
+    debug("Encrypt: iv=%s  blockNr=%zu  nonce=%s  key=%s\n",
+          asHex(this->iv, this->ivSize), this->blockNr, asHex(nonce, this->ivSize), asHex(this->key, this->keySize));
 
     /* Configure the cipher with the key and nonce */
     if (!EVP_CipherInit_ex2(this->ctx, this->cipher, this->key, nonce, 1, NULL))
@@ -626,7 +626,7 @@ aead_encrypt(AeadFilter *this,
     if (!EVP_CIPHER_CTX_ctrl(this->ctx, EVP_CTRL_AEAD_GET_TAG, (int)this->tagSize, tag))
         return openSSLError(error);
 
-    debug("Encrypt: tag=%s cipherSize=%d cipherText=%.128s \n", asHex(tag, this->tagSize), cipherUpdateSize+cipherFinalSize, asHex(cipherText, cipherUpdateSize + cipherFinalSize));
+    debug("Encrypt: tag=%s encryptSize=%d cipherText=%.128s \n", asHex(tag, this->tagSize), cipherUpdateSize+cipherFinalSize, asHex(cipherText, cipherUpdateSize + cipherFinalSize));
     /* Output size combines both the encyption (update) and the finalization. */
     return cipherUpdateSize + cipherFinalSize;
 }
@@ -640,7 +640,7 @@ aead_encrypt(AeadFilter *this,
  *  @param header - text to be authenticated but not encrypted.
  *  @param headerSize - size of header. If 0, then header can be NULL.
  *  @param cipherText - the output encrypted text
- *  @param cipherSize - the size of the buffer on input, actual size on output.
+ *  @param encryptSize - the size of the buffer on input, actual size on output.
  *  @param tag - the output MAC tag of size this->tagSize
  *  @param error - Keep track of errors.
  */
@@ -651,15 +651,15 @@ aead_decrypt(AeadFilter *this,
              Byte *cipherText, size_t cipherSize,
              Byte *tag, Error *error)
 {
-    debug("Decrypt:  cipherSize=%zu  cipher=%s  cipherText=%.128s \n", cipherSize, this->cipherName,  asHex(cipherText, cipherSize));
+    debug("Decrypt:  encryptSize=%zu  cipher=%s  cipherText=%.128s \n", cipherSize, this->cipherName,  asHex(cipherText, cipherSize));
     /* Reinitialize the encryption context to start a new record */
     EVP_CIPHER_CTX_reset(this->ctx);
 
     /* Generate nonce by XOR'ing the initialization vector with the sequence number */
     Byte nonce[EVP_MAX_IV_LENGTH];
-    generateNonce(nonce, this->iv, this->ivSize, this->recordNr);
-    debug("Decrypt: iv=%s  recordNr=%zu  nonce=%s  key=%s  tag=%s\n",
-          asHex(this->iv, this->ivSize), this->recordNr, asHex(nonce, this->ivSize), asHex(this->key, this->keySize), asHex(tag, this->tagSize));
+    generateNonce(nonce, this->iv, this->ivSize, this->blockNr);
+    debug("Decrypt: iv=%s  blockNr=%zu  nonce=%s  key=%s  tag=%s\n",
+          asHex(this->iv, this->ivSize), this->blockNr, asHex(nonce, this->ivSize), asHex(this->key, this->keySize), asHex(tag, this->tagSize));
 
     /* Configure the cipher with key and initialization vector */
     if (!EVP_CipherInit_ex2(this->ctx, this->cipher, this->key, nonce, 0, NULL))

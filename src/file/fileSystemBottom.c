@@ -1,5 +1,5 @@
 /**
- * FileSystemSink is the consumer of file system events, doing the actual
+ * FileSystemBottom is the consumer of file system events, doing the actual
  * work of opening, closing, reading and writing files.
  * This particular sink works with a Posix file system, and it is
  * a straightforward wrapper around Posix system calls.
@@ -9,10 +9,10 @@
 #include <unistd.h>
 #include "common/syscall.h"
 #include "common/passThrough.h"
-#include "fileSystemSink.h"
+#include "fileSystemBottom.h"
 
 /* A conventional POSIX file system for reading/writing a file. */
-struct FileSystemSink {
+struct FileSystemBottom {
     Filter filter;   /* first in every Filter. */
     int fd;          /* The file descriptor for the currrently open file. */
     bool writable;   /* Can we write to the file? */
@@ -28,12 +28,12 @@ static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered
 /**
  * Open a Posix file.
  */
-FileSystemSink *fileSystemOpen(FileSystemSink *sink, char *path, int oflags, int perm, Error *error)
+FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, char *path, int oflags, int perm, Error *error)
 {
     /* Clone ourself. */
-    FileSystemSink *this = fileSystemSinkNew();
+    FileSystemBottom *this = fileSystemBottomNew();
 
-    /* Check the oflags we are opening the file in. TODO: move checks to fileSource. */
+    /* Check the oflags we are opening the file in. TODO: move checks to ioStack. */
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
     this->eof = false;
@@ -53,9 +53,9 @@ FileSystemSink *fileSystemOpen(FileSystemSink *sink, char *path, int oflags, int
  * Write data to a file. For efficiency, we like larger buffers,
  * but in a pinch we can write individual bytes.
  */
-size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *error)
+size_t fileSystemWrite(FileSystemBottom *this, Byte *buf, size_t bufSize, Error *error)
 {
-    /* Check for errors. TODO: move to fileSource. */
+    /* Check for errors. TODO: move to ioStack. */
     if (errorIsOK(*error) && !this->writable)
         *error = errorCantWrite;
 
@@ -68,7 +68,7 @@ size_t fileSystemWrite(FileSystemSink *this, Byte *buf, size_t bufSize, Error *e
  * Read data from a file, checking for EOF. We like larger read buffers
  * for efficiency, but they are not required.
  */
-size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t size, Error *error)
+size_t fileSystemRead(FileSystemBottom *this, Byte *buf, size_t size, Error *error)
 {
 
     /* Check for errors. */
@@ -84,7 +84,7 @@ size_t fileSystemRead(FileSystemSink *this, Byte *buf, size_t size, Error *error
 /**
  * Close a Posix file.
  */
-void fileSystemClose(FileSystemSink *this, Error *error)
+void fileSystemClose(FileSystemBottom *this, Error *error)
 {
     /* Close the fd if it was opened earlier. */
     sys_close(this->fd, error);
@@ -95,7 +95,7 @@ void fileSystemClose(FileSystemSink *this, Error *error)
 /**
  * Push data which has been written out to persistent storage.
  */
-void fileSystemSync(FileSystemSink *this, Error *error)
+void fileSystemSync(FileSystemBottom *this, Error *error)
 {
     /* Error if file was readonly. */
     if (errorIsOK(*error) && !this->writable)
@@ -112,7 +112,7 @@ void fileSystemSync(FileSystemSink *this, Error *error)
  * Since we are not supporting O_DIRECT yet, we simply
  * return 1 indicating we can deal with any size.
  */
-size_t fileSystemBlockSize(FileSystemSink *this, size_t prevSize, Error *error)
+size_t fileSystemBlockSize(FileSystemBottom *this, size_t prevSize, Error *error)
 {
     return 1;
 }
@@ -123,18 +123,18 @@ size_t fileSystemBlockSize(FileSystemSink *this, size_t prevSize, Error *error)
  * This allows us to remove temporary files when a transaction aborts.
  * Not currently implemented.
  */
-void fileSystemAbort(FileSystemSink *this, Error *errorO)
+void fileSystemAbort(FileSystemBottom *this, Error *errorO)
 {
     abort(); /* TODO: not implemented. */
 }
 
-pos_t fileSystemSeek(FileSystemSink *this, pos_t position, Error *error)
+pos_t fileSystemSeek(FileSystemBottom *this, pos_t position, Error *error)
 {
     return sys_lseek(this->fd, position, error);
 }
 
 
-void fileSystemDelete(FileSystemSink *this, char *path, Error *error)
+void fileSystemDelete(FileSystemBottom *this, char *path, Error *error)
 {
     /* Unlink the file, even if we've already had an error */
     Error tempError = errorOK;
@@ -160,10 +160,10 @@ FilterInterface fileSystemInterface = (FilterInterface)
 /**
  * Create a new Posix file system Sink.
  */
-FileSystemSink *fileSystemSinkNew()
+FileSystemBottom *fileSystemBottomNew()
 {
-    FileSystemSink *this = malloc(sizeof(FileSystemSink));
-    *this = (FileSystemSink)
+    FileSystemBottom *this = malloc(sizeof(FileSystemBottom));
+    *this = (FileSystemBottom)
     {
         .fd = -1,
         .filter = (Filter){

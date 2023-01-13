@@ -24,14 +24,14 @@
  - Random writes to compressed files.
 
 
-## Record Oriented I/O
+## Block Oriented I/O
 ### Logical Model
-- A file consists of a sequence of fixed-size record, followed by
-  a final record which may be smaller.
-- A record fits into memory.
-- A record is a known point for positioning.
-- To append to a file, the last record may be overwritten.
-- Various filters may change the record size or add headers. These transformations 
+- A file consists of a sequence of fixed-size block, followed by
+  a final block which may be smaller.
+- A block fits into memory.
+- A block is a known point for positioning.
+- To append to a file, the last block may be overwritten.
+- Various filters may change the block size or add headers. These transformations 
   are not visible to the users of the data.
 - Can determine file size by seeking to the end.
   <br>Might not be the exact file size, but must be good enough to determine number
@@ -84,7 +84,7 @@
 flowchart LR 
     source[FileSource<hr>fileRead<br>fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> Buffered <-- blocks -->
-    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Encryption
@@ -92,7 +92,7 @@ flowchart LR
 flowchart LR 
     source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream <-- blocks --> Encryption <-- blocks --> 
-    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Compression
@@ -100,7 +100,7 @@ flowchart LR
 flowchart LR
     source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream <-- blocks --> LZ4Compression <-- blocks --> 
-    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ``` 
 
 ### Split a stream into multiple files.
@@ -109,7 +109,7 @@ flowchart LR
 flowchart LR
     source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream <-- blocks --> a[File Split <hr> multiple <br> files] <-- blocks --> 
-    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 ### Why not? All of the above.
@@ -117,7 +117,7 @@ flowchart LR
 flowchart LR
     source[FileSource <hr> fileRead <br> fileWrite <br> fileOpen <br> fileClose <br> fileSync]
        <-- bytes --> BufferedStream  <-- blocks --> LZ4Compression <-- blocks --> Encryption <-- blocks --> a[File Split <hr> multiple <br> files] <-- blocks --> 
-    sink[FileSystemSink <hr> read <br> write <br> open <br> close <br> datasync]
+    sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
 TODO:
@@ -134,8 +134,8 @@ TODO:
 - End of File : verify encrypted file actually ends.
 
 ### Proposed Vocabulary (Not reflected in code yet)
-***Block*** - A cipher block, 16 bytes for AES.
-<br>***Record*** - A piece of data which fits in memory.
+***CipherBlock*** - A cipher block, 16 bytes for AES.
+<br>***Block*** - A piece of fixed size data which fits in memory.
 <br>***File*** - A collection of fixed size records, where the last record might be smaller.
 <br>Note it is possible to seek to any record in a file.
 <br>***Sized Record*** - A record preceded by its size.

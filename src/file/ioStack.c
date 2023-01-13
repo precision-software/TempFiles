@@ -1,5 +1,5 @@
 /**
- * FileSource is the origin point for file management events.
+ * IoStack is the origin point for file management events.
  * It presents an fread/fwrite style to the entire pipeline.
  * It doesn't do much on its own, as it is
  * more a placeholder for sending events further down the pipeline.
@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <sys/fcntl.h>
 #include "common/passThrough.h"
-#include "file/fileSource.h"
+#include "file/ioStack.h"
 
-struct FileSource {
+struct IoStack {
     Filter filter;
     bool open;
 };
@@ -17,7 +17,7 @@ struct FileSource {
 /**
  * Open a file, returning error information.
  */
-FileSource *fileOpen(FileSource *pipe, char *path, int oflags, int perm, Error *error)
+IoStack *fileOpen(IoStack *pipe, char *path, int oflags, int perm, Error *error)
 {
 
     /* Appending to a file is tricky for encrypted/compressed files. TODO: let following filters decide O_APPEND */
@@ -28,12 +28,12 @@ FileSource *fileOpen(FileSource *pipe, char *path, int oflags, int perm, Error *
     Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
 
     /* clone the current filter, pointing to the downstream clone */
-    FileSource *new = fileSourceNew(next);
+    IoStack *new = ioStackNew(next);
 
     /* Make note we are open */
     new->open = true;
 
-    /* Negotiate record sizes. We don't place any constraints on record size. */
+    /* Negotiate block sizes. We don't place any constraints on block size. */
     if (errorIsOK(*error))
         passThroughBlockSize(new, 1, error);
 
@@ -47,7 +47,7 @@ FileSource *fileOpen(FileSource *pipe, char *path, int oflags, int perm, Error *
 /**
  * Write data to a file.
  */
-size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error)
+size_t fileWrite(IoStack *this, Byte *buf, size_t bufSize, Error *error)
 {
     return passThroughWriteAll(this, buf, bufSize, error);
 }
@@ -56,17 +56,17 @@ size_t fileWrite(FileSource *this, Byte *buf, size_t bufSize, Error *error)
 /**
  * Read data from a file.
  */
-size_t fileRead(FileSource *this, Byte *buf, size_t size, Error *error)
+size_t fileRead(IoStack *this, Byte *buf, size_t size, Error *error)
 {
     return passThroughReadAll(this, buf, size, error);
 }
 
 
 /*
- * Seek to the last partial record in the file, or EOF if all records
- * are full sized. (Think of EOF as a final, empty record.)
+ * Seek to the last partial block in the file, or EOF if all blocks
+ * are full sized. (Think of EOF as a final, empty block.)
  */
-pos_t fileSeek(FileSource *this, pos_t position, Error *error)
+pos_t fileSeek(IoStack *this, pos_t position, Error *error)
 {
     return passThroughSeek(this, position, error);
 }
@@ -74,7 +74,7 @@ pos_t fileSeek(FileSource *this, pos_t position, Error *error)
 /**
  * Close a file.
  */
-void fileClose(FileSource *this, Error *error)
+void fileClose(IoStack *this, Error *error)
 {
     if (errorIsEOF(*error))
         *error = errorOK;
@@ -84,7 +84,7 @@ void fileClose(FileSource *this, Error *error)
     free(this);
 }
 
-void fileDelete(FileSource *this, char *path, Error *error)
+void fileDelete(IoStack *this, char *path, Error *error)
 {
     passThroughDelete(this, path, error);
 }
@@ -94,10 +94,10 @@ void fileDelete(FileSource *this, char *path, Error *error)
  * Create a new File Source for generating File events. Since this is the
  * first element in a pipeline of filters, it is the handle for the entire pipeline.
  */
-FileSource *
-fileSourceNew(void *next)
+IoStack *
+ioStackNew(void *next)
 {
-    FileSource *this = malloc(sizeof(FileSource));
+    IoStack *this = malloc(sizeof(IoStack));
     filterInit(this, &passThroughInterface, next);
 
     this->open = false;

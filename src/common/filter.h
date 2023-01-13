@@ -10,30 +10,30 @@
  * the event passes down the pipeline until some other filter can process it.
  * (Note that events are implemented as simple procedure calls.)
  *
- * Data flows between filters in fixed size "records", where a record is a
- * chunk of data which fits in memory. A filter transforms records,
- * changing either the content or the size of the records. Since sizes can change,
- * record size information is negotiated
+ * Data flows between filters in fixed size "blocks", where a block is a
+ * chunk of data which fits in memory. A filter transforms blocks,
+ * changing either the content or the size of the blocks. Since sizes can change,
+ * block size information is negotiated
  * throughout the pipeline with the "BlockSize" event,
- * allowing each filter to state its size requirements and to know its neighbor's record size.
+ * allowing each filter to state its size requirements and to know its neighbor's block size.
  *
- * Record sizes between stages do not always match. It is always acceptable for a predecessor's record
- * size to be a multiple of a successor's successors size. If record sizes are otherwise incompatible, it
+ * Block sizes between stages do not always match. It is always acceptable for a predecessor's block
+ * size to be a multiple of a successor's successors size. If block sizes are otherwise incompatible, it
  * is possible to insert a "buffered" filter into the stream which buffers data into the appropriate
- * record size.
+ * block size.
  *
- * The resulting output file consists of a sequence of equally sized records, possibly followed by
- * a final, partial record. Some filters (including compression) may produce variable sized records;
- * those filters need to maintain the appearance of fixed size records, even though the resulting
+ * The resulting output file consists of a sequence of equally sized blocks, possibly followed by
+ * a final, partial block. Some filters (including compression) may produce variable sized blocks;
+ * those filters need to maintain the appearance of fixed size blocks, even though the resulting
  * output is not actually fixed size.
  *
- * The "Seek" event allows positioning to a random record. If seeking to FILE_END_POSITION,
+ * The "Seek" event allows positioning to a random block. If seeking to FILE_END_POSITION,
  * the event will position to
- *    1) The beginning of the final partial record, or
- *    2) if no partial records, the actial EOF,
- *    3) In some cases, the beginning of the final record, even if full.
+ *    1) The beginning of the final partial block, or
+ *    2) if no partial blocks, the actial EOF,
+ *    3) In some cases, the beginning of the final block, even if full.
  *
- * Condition 3) occurs because, without examining the last record, it may not
+ * Condition 3) occurs because, without examining the last block, it may not
  * be possible to determine if it partial or full.  (For example, encryption with padding.)
  * (Consider resolving condition 3) in the filter itself, so 1) and 2) always apply.)
  *

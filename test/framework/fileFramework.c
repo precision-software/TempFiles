@@ -6,15 +6,15 @@
 #include <stdio.h>
 #include <sys/fcntl.h>
 #include "file/buffered.h"
-#include "file/fileSystemSink.h"
+#include "file/fileSystemBottom.h"
 #include "compress/lz4/lz4.h"
-#include "file/fileSource.h"
+#include "file/ioStack.h"
 #include "fileSplit/fileSplit.h"
 
 #include "framework/fileFramework.h"
 #include "framework/unitTestInternal.h"
 
-void seekTest(FileSource *pipe, char *nameFmt);
+void seekTest(IoStack *pipe, char *nameFmt);
 
 /* Given the position in the seek, generate one byte of data for that position. */
 static inline Byte generateByte(size_t position)
@@ -49,11 +49,11 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
  *   - doesn't align with typical block sizes, and
  *   - is compressible.
  */
-void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
+void generateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("generateFile: path=%s\n", path);
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     Byte *buf = malloc(bufferSize);
 
     size_t position;
@@ -72,11 +72,11 @@ void generateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 }
 
 /* Verify a file has the correct data */
-void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
+void verifyFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("verifyFile: path=%s\n", path);
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
 
@@ -104,12 +104,12 @@ void verifyFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize
  *   - doesn't align with typical block sizes, and
  *   - is compressible.
  */
-void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSize)
+void allocateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("allocateFile: path=%s\n", path);
     /* Start out by allocating space and filling the file with "X"s. */
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
     memset(buf, 'X', bufferSize);
@@ -131,7 +131,7 @@ void allocateFile(FileSource *pipe, char *path, size_t fileSize, size_t bufferSi
 
 static const int prime = 3197;
 
-void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
+void generateRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
 {
     debug("generateRandomFile: path=%s\n", path);
     /* The nr of blocks must be relatively prime to "prime", otherwise we won't visit all the blocks. */
@@ -139,7 +139,7 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     PG_ASSERT( nrBlocks == 0 || (nrBlocks % prime) != 0);
 
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_RDWR, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -148,7 +148,7 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     {
         /* Pick a pseudo-random block and seek to it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
-        //printf("fileSeek - idx = %u  recordNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
+        //printf("fileSeek - idx = %u  blockNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
         fileSeek(file, position, &error);
         PG_ASSERT_OK(error);
 
@@ -166,11 +166,11 @@ void generateRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bl
     PG_ASSERT_OK(error);
 }
 
-void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
+void appendFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
 {
     debug("appendFile: path=%s\n", path);
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_RDWR, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -198,11 +198,11 @@ void appendFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
  * Verify a file has the correct data through randomlike seeks.
  * This should do a complete verification - examining every byte of the file.
  */
-void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t blockSize)
+void verifyRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
 {
     debug("verifyRandomFile: path=%s\n", path);
     Error error = errorOK;
-    FileSource *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
+    IoStack *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -228,7 +228,7 @@ void verifyRandomFile(FileSource *pipe, char *path, size_t fileSize, size_t bloc
 }
 
 
-void deleteFile(FileSource *pipe, char *name)
+void deleteFile(IoStack *pipe, char *name)
 {
     Error error = errorOK;
     fileDelete(pipe, name, &error);
@@ -237,7 +237,7 @@ void deleteFile(FileSource *pipe, char *name)
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
@@ -264,7 +264,7 @@ void singleSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t buf
 }
 
 /* run a matrix of tests for various file sizes and I/O sizes.  All will use a 1K block size. */
-void seekTest(FileSource *pipe, char *nameFmt)
+void seekTest(IoStack *pipe, char *nameFmt)
 {
     size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
     size_t bufSize[] = {1024, 32*1024, 64, 35, 2037, 1};
@@ -279,7 +279,7 @@ void seekTest(FileSource *pipe, char *nameFmt)
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleStreamTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
@@ -298,7 +298,7 @@ void singleStreamTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t b
 
 
 /* run a matrix of tests for various file sizes and buffer sizes */
-void streamTest(FileSource *pipe, char *nameFmt)
+void streamTest(IoStack *pipe, char *nameFmt)
 {
     size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
     size_t bufSize[] = {1024, 32*1024, 64, 1};
@@ -312,7 +312,7 @@ void streamTest(FileSource *pipe, char *nameFmt)
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleReadSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleReadSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
@@ -333,7 +333,7 @@ void singleReadSeekTest(FileSource *pipe, char *nameFmt, size_t fileSize, size_t
 
 
 /* run a matrix of tests for various file sizes and buffer sizes */
-void readSeekTest(FileSource *pipe, char *nameFmt)
+void readSeekTest(IoStack *pipe, char *nameFmt)
 {
     size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
     size_t bufSize[] = {1024, 32*1024, 64, 1};

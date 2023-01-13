@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <sys/fcntl.h>
 #include "file/buffered.h"
-#include "file/fileSystemSink.h"
+#include "file/fileSystemBottom.h"
 #include "compress/lz4/lz4.h"
-#include "file/fileSource.h"
+#include "file/ioStack.h"
 #include "fileSplit/fileSplit.h"
 
 #include "framework/fileFramework.h"
@@ -16,11 +16,11 @@ void testMain()
     system("rm -rf " TEST_DIR "split; mkdir -p " TEST_DIR "split");
 
     beginTestGroup("File Splitting");
-    FileSource *split =
-            fileSourceNew(
+    IoStack *split =
+            ioStackNew(
                     bufferedNew(1024,
                             fileSplitNew(1024 * 1024, formatPath, "%s-%06d.seg",
-                                               fileSystemSinkNew())));
+                                               fileSystemBottomNew())));
     seekTest(split, TEST_DIR "split/testfile_%u_%u");
 
     //splitVerify("Split into multiple files: verify files");

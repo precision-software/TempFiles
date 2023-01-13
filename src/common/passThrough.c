@@ -69,25 +69,25 @@ size_t passThroughReadAll(void *thisVoid, Byte *buf, size_t size, Error *error)
 
 
 /*
- * Read a variable size record.
+ * Read a variable size block.
  */
-size_t passThroughReadSized(void *this, Byte *record, size_t size, Error *error)
+size_t passThroughReadSized(void *this, Byte *block, size_t size, Error *error)
 {
-    /* Read the record length  TODO: create passThroughGet4(..) */
-    size_t recordSize = passThroughGet4(this, error);
+    /* Read the block length  TODO: create passThroughGet4(..) */
+    size_t blockSize = passThroughGet4(this, error);
     if (isError(*error))
         return 0;
-    if (recordSize > size)
-        return filterError(error, "ReadSized: Record length is too large");
+    if (blockSize > size)
+        return filterError(error, "ReadSized: Block length is too large");
 
-    /* Read the rest of the record */
-    size_t actual = passThroughReadAll(this, record, recordSize, error);
+    /* Read the rest of the block */
+    size_t actual = passThroughReadAll(this, block, blockSize, error);
 
-    /* Done. actual will match cipherSize, unless there was an error. */
+    /* Done. actual will match encryptSize, unless there was an error. */
     return actual;
 }
 
-size_t passThroughWriteSized(void *this, Byte *record, size_t size, Error *error)
+size_t passThroughWriteSized(void *this, Byte *block, size_t size, Error *error)
 {
     if (isError(*error))
         return 0;
@@ -95,8 +95,8 @@ size_t passThroughWriteSized(void *this, Byte *record, size_t size, Error *error
     /* Write out the 32-bit size in network byte order (big endian) */
     passThroughPut4(this, size, error);
 
-    /* Write out the record */
-    return passThroughWriteAll(this, record, size, error);
+    /* Write out the block */
+    return passThroughWriteAll(this, block, size, error);
 }
 
 
