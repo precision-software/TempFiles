@@ -414,7 +414,7 @@ void aeadHeaderRead(AeadFilter *this, Error *error)
 
     /* Get the plain text record size for this encrypted file. */
     this->plainSize = unpack4(&bp, end);
-    if (this->plainSize > MAX_RECORD_SIZE)
+    if (this->plainSize > MAX_BLOCK_SIZE)
         return (void) filterError(error, "AEAD record size in header is > 16MB");
 
     /* Get the cipher name */

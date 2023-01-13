@@ -1,7 +1,7 @@
 /*
  * A collection of helper routines for packing/unpacking data in a buffer.
  *   - Quick, especially when inlined.
- *   - No error checking at all.  BEWARE!
+ *   - Minimal error checking to not overflow buffer.
  *   - All bytes are in stored "network" (big endian) order.
  *
  * Example of use:

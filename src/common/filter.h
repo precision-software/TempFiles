@@ -28,7 +28,7 @@
  * output is not actually fixed size.
  *
  * The "Seek" event allows positioning to a random block. If seeking to FILE_END_POSITION,
- * the event will position to
+ * the event will return the file size and position the file to:   (TODO: Verify ... things have changed)
  *    1) The beginning of the final partial block, or
  *    2) if no partial blocks, the actial EOF,
  *    3) In some cases, the beginning of the final block, even if full.
@@ -57,7 +57,7 @@
 typedef uint64_t pos_t;
 #define FILE_END_POSITION ((pos_t)-1)
 
-#define MAX_RECORD_SIZE (16*1024*1024)
+#define MAX_BLOCK_SIZE (16*1024*1024)
 
 /* This structure is an abstract header which is the first element of all filter types. */
 typedef struct Filter {
