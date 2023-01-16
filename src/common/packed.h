@@ -23,7 +23,7 @@
 #ifndef FILTER_PACKED_H
 #define FILTER_PACKED_H
 
-#include "common/error.h"  /* for Byte and size_t. */
+#include "iostack_error.h"  /* for Byte and size_t. */
 
 /* Save a byte and bump the pointer. */
 inline static void pack1(Byte **bp, Byte *end, size_t val)

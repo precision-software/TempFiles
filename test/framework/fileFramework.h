@@ -2,7 +2,7 @@
 #ifndef FILTER_FILEFRAMEWORK_H
 #define FILTER_FILEFRAMEWORK_H
 
-#include "file/ioStack.h"
+#include "iostack.h"
 
 
 void seekTest(IoStack *pipe, char *nameFmt);

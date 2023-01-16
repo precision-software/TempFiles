@@ -37,7 +37,7 @@ size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
  * Write bytes to a file, respecting error handling conventions.
  * @param error - if set on entry, return immediately. On exit, contains OK, EOF or error.
  */
-size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
+size_t sys_write(int fd, const Byte *buf, size_t size, Error *error)
 {
     if (isError(*error))
         return 0;
@@ -60,7 +60,7 @@ size_t sys_write(int fd, Byte *buf, size_t size, Error *error)
  * Open a file, respecting error handling conventions.
  *  @param error - if set on entry, return immediately. On exit, contains OK, EOF or error.
  */
-int sys_open(char *path, int oflag, int perm, Error *error)
+int sys_open(const char *path, int oflag, int perm, Error *error)
 {
     if (isError(*error)) return -1;
 
@@ -102,10 +102,10 @@ void sys_datasync(int fd, Error *error)
 /**
  * Seek to an absolute file position.
  */
-pos_t sys_lseek(int fd, pos_t position, Error *error)
+off_t sys_lseek(int fd, off_t position, Error *error)
 {
     if (isError(*error))
-        return (pos_t)-1;
+        return (off_t)-1;
 
     off_t ret;
     if (position == FILE_END_POSITION)
@@ -115,14 +115,14 @@ pos_t sys_lseek(int fd, pos_t position, Error *error)
     {
         ret = lseek(fd, (off_t) position, SEEK_SET);
         if (ret != -1 && ret != position)
-            filterError(error, "Seeking beyond end of file - holes not allowed");
+			ioStackError(error, "Seeking beyond end of file - holes not allowed");
     }
 
     if (ret == -1)
         *error = systemError();
 
     debug("sys_lseek: fd=%d  position=%lld  ret=%lld\n", fd, (off_t)position, ret);
-    return (pos_t)ret;
+    return (off_t)ret;
 }
 
 

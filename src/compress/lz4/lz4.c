@@ -8,16 +8,16 @@
 #include "common/debug.h"
 #include "common/filter.h"
 #include "compress/lz4/lz4.h"
-#include "common/error.h"
+#include "iostack_error.h"
 #include "common/passThrough.h"
-#include "file/ioStack.h"
+#include "iostack.h"
 #include "file/fileSystemBottom.h"
 #include "file/buffered.h"
 
 /* Forward references */
 static bool isErrorLz4(size_t size, Error *error);
-size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error);
-size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error);
+size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, const Byte *fromBuf, size_t fromSize, Error *error);
+size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, const Byte *fromBuf, size_t fromSize, Error *error);
 size_t compressedSize(size_t size);
 
 /* Structure holding the state of our compression/decompression filter. */
@@ -31,7 +31,7 @@ struct Lz4Compress
     size_t bufActual;                 /* The amount of compressed data in buffer */
 
     IoStack *indexFile;            /* Index file created "on the fly" to support block seeks. */
-    pos_t compressedPosition;         /* The offset of the current compressed block within the compressed file */
+    off_t compressedPosition;         /* The offset of the current compressed block within the compressed file */
 
     Byte *tempBuf;                    /* temporary buffer to hold decompressed data when probing for size */
 
@@ -39,7 +39,7 @@ struct Lz4Compress
 };
 
 
-Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode, Error *error)
+Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, const char *path, int oflags, int mode, Error *error)
 {
     debug("lz4Open: path=%s  oflags=0x%x\n", path, oflags);
 
@@ -68,14 +68,14 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, char *path, int oflags, int mode
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 {
     /* Starting with the index file, we send 4 byte blocks */
-    size_t indexSize = passThroughBlockSize(this->indexFile, sizeof(pos_t), error);
-    if (sizeof(pos_t) % indexSize != 0)
-        return filterError(error, "lz4 index file has incompatible block size");
+    size_t indexSize = passThroughBlockSize(this->indexFile, sizeof(off_t), error);
+    if (sizeof(off_t) % indexSize != 0)
+        return ioStackError(error, "lz4 index file has incompatible block size");
 
     /* For our data file, we send variable sized blocks to the next stage, so treat as byte stream. */
     size_t nextSize = passThroughBlockSize(this, 1, error);
     if (nextSize != 1)
-        return filterError(error, "lz4 Compression has mismatched block size");
+        return ioStackError(error, "lz4 Compression has mismatched block size");
 
     /* Allocate a buffer to hold a compressed block */
     this->compressedSize = compressedSize(this->blockSize);
@@ -87,7 +87,7 @@ size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
 }
 
 
-size_t lz4CompressWrite(Lz4Compress *this, Byte *buf, size_t size, Error *error)
+size_t lz4CompressWrite(Lz4Compress *this, const Byte *buf, size_t size, Error *error)
 {
     /* We do one block at a time */
     size = sizeMin(size, this->blockSize);
@@ -143,7 +143,7 @@ size_t lz4CompressRead(Lz4Compress *this, Byte *buf, size_t size, Error *error)
     return actual;
 }
 
-pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
+off_t lz4CompressSeek(Lz4Compress *this, off_t position, Error *error)
 {
     debug("lzSeek (start): position=%lld  compressedPosition=%llu\n", position, this->compressedPosition);
 
@@ -159,7 +159,7 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
             return 0;
 
         /* Seek to the final partial record, if any */
-        pos_t lastPosition = (nrRecords-1) * this->blockSize;
+        off_t lastPosition = (nrRecords-1) * this->blockSize;
         lz4CompressSeek(this, lastPosition, error);
 
         /* read the final partial record, treating EOF like a zero length partial record */
@@ -180,7 +180,7 @@ pos_t lz4CompressSeek(Lz4Compress *this, pos_t position, Error *error)
     /* otherwise, seeking to a file position */
     /* Verify we are seeking to a record boundary */
     if (position % this->blockSize != 0)
-        return filterError(error, "l14 Compression - must seek to a block boundary");
+        return ioStackError(error, "l14 Compression - must seek to a block boundary");
 
     /* Read from the index to get the position in the compressed file. */
     size_t recordNr = position / this->blockSize;
@@ -240,12 +240,12 @@ void lz4CompressDelete(Lz4Compress *this, char *path, Error *error)
  * @param error - keeps track of the error status.
  * @return - the number of compressed bytes.
  */
-size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error)
+size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, const Byte *fromBuf, size_t fromSize, Error *error)
 {
     debug("lz4CompressBuffer: toSize=%zu fromSize=%zu data=%.*s\n", toSize, fromSize, (int)fromSize, (char*)fromBuf);
     int actual = LZ4_compress_default((char*)fromBuf, (char*)toBuf, (int)fromSize, (int)toSize);
     if (actual < 0)
-        return filterError(error, "lz4 unable to compress the buffer");
+        return ioStackError(error, "lz4 unable to compress the buffer");
 
     debug("lz4CompressBuffer: actual=%d   cipherBuf=%s\n", actual, asHex(this->compressedBuf, actual));
     return actual;
@@ -262,12 +262,12 @@ size_t lz4CompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fr
  * @param error - keeps track of the error status.
  * @return - the number of decompressed bytes.
  */
-size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, Byte *fromBuf, size_t fromSize, Error *error)
+size_t lz4DecompressBuffer(Lz4Compress *this, Byte *toBuf, size_t toSize, const Byte *fromBuf, size_t fromSize, Error *error)
 {
     debug("lz4DeompressBuffer: fromSize=%zu toSize=%zu  cipherBuf=%s\n", fromSize, toSize, asHex(this->compressedBuf, fromSize));
     int actual = LZ4_decompress_safe((char*)fromBuf, (char*)toBuf, (int)fromSize, (int)toSize);
     if (actual < 0)
-        return filterError(error, "lz4 unable to decompress a buffer");
+        return ioStackError(error, "lz4 unable to decompress a buffer");
 
     debug("lz4DecompressBuffer: actual=%d cipherBuf=%.*s\n", actual, actual, toBuf);
     return actual;

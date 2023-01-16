@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <sys/fcntl.h>
 #include "common/filter.h"
-#include "common/error.h"
+#include "iostack_error.h"
 #include "file/fileSystemBottom.h"
 #include "file/buffered.h"
 #include "compress/lz4/lz4.h"
-#include "file/ioStack.h"
+#include "iostack.h"
 
 #include "framework/fileFramework.h"
 #include "framework/unitTest.h"

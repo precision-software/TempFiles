@@ -5,9 +5,11 @@
  * more a placeholder for sending events further down the pipeline.
  */
 #include <stdlib.h>
+#include <stdarg.h>
 #include <sys/fcntl.h>
 #include "common/passThrough.h"
-#include "file/ioStack.h"
+#include "common/packed.h"
+#include "iostack.h"
 
 struct IoStack {
     Filter filter;
@@ -17,7 +19,7 @@ struct IoStack {
 /**
  * Open a file, returning error information.
  */
-IoStack *fileOpen(IoStack *pipe, char *path, int oflags, int perm, Error *error)
+IoStack *fileOpen(IoStack *pipe, const char *path, int oflags, int perm, Error *error)
 {
 
     /* Appending to a file is tricky for encrypted/compressed files. TODO: let following filters decide O_APPEND */
@@ -47,7 +49,7 @@ IoStack *fileOpen(IoStack *pipe, char *path, int oflags, int perm, Error *error)
 /**
  * Write data to a file.
  */
-size_t fileWrite(IoStack *this, Byte *buf, size_t bufSize, Error *error)
+size_t fileWrite(IoStack *this, const Byte *buf, size_t bufSize, Error *error)
 {
     return passThroughWriteAll(this, buf, bufSize, error);
 }
@@ -66,7 +68,7 @@ size_t fileRead(IoStack *this, Byte *buf, size_t size, Error *error)
  * Seek to the last partial block in the file, or EOF if all blocks
  * are full sized. (Think of EOF as a final, empty block.)
  */
-pos_t fileSeek(IoStack *this, pos_t position, Error *error)
+off_t fileSeek(IoStack *this, off_t position, Error *error)
 {
     return passThroughSeek(this, position, error);
 }
@@ -103,4 +105,99 @@ ioStackNew(void *next)
     this->open = false;
 
     return this;
+}
+
+/*
+ * Print a formatted message to the IoStack
+ */
+bool filePrintf(void *this, Error *error, char *format, ...)
+{
+	va_list ap;
+	Byte buffer[2048];
+
+	/* Format into a local buffer */
+	va_start(ap, format);
+	size_t actual = vsnprintf((char*)buffer, sizeof(buffer), format, ap);
+	va_end(ap);
+
+	/* Write the buffer out */
+	if (actual > 0)
+		passThroughWriteAll(this, buffer, actual, error);
+	else
+		ioStackError(error, "Buffer overflow in filePrintf");
+
+	/* true if there was an error */
+    return isError(*error);
+}
+
+/*
+ * Routines to read/write binary integers to an I/O Stack.
+ * The integers are sent in network byte order (big endian)
+ */
+bool filePut8(void *this, uint64_t value, Error *error)
+{
+	Byte buf[8]; Byte *bp = buf;
+	pack8(&bp, bp + 8, value);
+	passThroughWriteAll(this, buf, 8, error);
+	return isError(*error);
+}
+
+uint64_t fileGet8(void *this, Error *error)
+{
+	Byte buf[8]; Byte *bp = buf;
+	size_t actual = passThroughReadAll(this, buf, 8, error);
+	if (!errorIsEOF(*error) && actual != 8)
+		return ioStackError(error, "fileGet8 unable to read bytes");
+    else
+	    return unpack8(&bp, buf+8);
+}
+
+
+bool filePut4(void *this, uint32_t value, Error *error)
+{
+	Byte buf[4]; Byte *bp = buf;
+	pack4(&bp, bp + 4, value);
+	passThroughWriteAll(this, buf, 4, error);
+	return isError(*error);
+}
+
+uint32_t fileGet4(void *this, Error *error)
+{
+	Byte buf[4]; Byte *bp = buf;
+	size_t actual = passThroughReadAll(this, buf, 4, error);
+	if (!errorIsEOF(*error) && actual != 4)
+		return ioStackError(error, "fileGet4 unable to read bytes");
+	else
+	    return unpack4(&bp, buf+4);
+}
+
+bool filePut2(void *this, uint16_t value, Error *error)
+{
+	Byte buf[2]; Byte *bp = buf;
+	pack2(&bp, bp+2, value);
+	passThroughWriteAll(this, buf, 2, error);
+	return isError(*error);
+}
+
+uint16_t fileGet2(void *this, Error *error)
+{
+	Byte buf[2]; Byte *bp = buf;
+	size_t actual = passThroughReadAll(this, buf, 2, error);
+	if (!errorIsEOF(*error) && actual != 2)
+		return ioStackError(error, "fileGet8 unable to read bytes");
+	else
+		return unpack4(&bp, buf+2);
+}
+
+bool filePut1(void *this, uint8_t value, Error *error)
+{
+	passThroughWriteAll(this, &value, 1, error);
+	return isError(*error);
+}
+
+uint8_t fileGet1(void *this, Error *error)
+{
+	Byte buf[1];
+	passThroughReadAll(this, buf, 1, error);
+	return *buf;
 }

@@ -2,19 +2,19 @@
  * In a pipeline of filters, these functions invoke the next
  * filter which is able to process the event.
  */
-#include "error.h"
+#include "iostack_error.h"
 #include "assert.h"
 #include "common/passThrough.h"
 #include "common/packed.h"
 
 static Error notInSink =
-        (Error){.code=errorCodeFilter, .msg="Request is not implemented for Sink", .causedBy=NULL};
+        (Error){.code=errorCodeIoStack, .msg="Request is not implemented for Sink", .causedBy=NULL};
 
 
 /**
  * Helper to repeatedly write to the file pipeline until all the data is written (or error).
  */
-size_t passThroughWriteAll(void *thisVoid, Byte *buf, size_t bufSize, Error *error)
+size_t passThroughWriteAll(void *thisVoid, const Byte *buf, size_t bufSize, Error *error)
 {
     assert ((ssize_t)bufSize > 0);
     Filter *this = (Filter *)thisVoid;
@@ -78,7 +78,7 @@ size_t passThroughReadSized(void *this, Byte *block, size_t size, Error *error)
     if (isError(*error))
         return 0;
     if (blockSize > size)
-        return filterError(error, "ReadSized: Block length is too large");
+        return ioStackError(error, "ReadSized: Block length is too large");
 
     /* Read the rest of the block */
     size_t actual = passThroughReadAll(this, block, blockSize, error);
@@ -112,37 +112,3 @@ size_t dummyBlockSize(Filter *this, size_t size, Error *error)
  * Defines a "no-op" filter, mainly to use as a placeholder.
  */
 FilterInterface passThroughInterface = (FilterInterface) {.fnBlockSize = (FilterBlockSize)dummyBlockSize};
-
-
-bool passThroughPut8(void *this, size_t value, Error *error)
-{
-    Byte buf[8]; Byte *bp = buf;
-    pack8(&bp, bp + 8, value);
-    passThroughWriteAll(this, buf, 8, error);
-    return bp > bp + 8;
-}
-
-size_t passThroughGet8(void *this, Error *error)
-{
-    Byte buf[8]; Byte *bp = buf;
-    passThroughReadAll(this, buf, 8, error);
-
-    return unpack8(&bp, buf+8);
-}
-
-
-bool passThroughPut4(void *this, size_t value, Error *error)
-{
-    Byte buf[4]; Byte *bp = buf;
-    pack4(&bp, bp + 4, value);
-    passThroughWriteAll(this, buf, 4, error);
-    return bp > bp + 4;
-}
-
-size_t passThroughGet4(void *this, Error *error)
-{
-    Byte buf[4]; Byte *bp = buf;
-    passThroughReadAll(this, buf, 4, error);
-
-    return unpack4(&bp, buf+4);
-}

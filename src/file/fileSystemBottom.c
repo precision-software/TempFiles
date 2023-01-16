@@ -20,15 +20,15 @@ struct FileSystemBottom {
     bool eof;        /* Has the currently open file read past eof? */
 };
 
-static Error errorCantWrite = (Error){.code=errorCodeFilter, .msg="Writing to file opened as readonly"};
-static Error errorCantRead = (Error){.code=errorCodeFilter, .msg="Reading from file opened as writeonly"};
-static Error errorReadTooSmall = (Error){.code=errorCodeFilter, .msg="unbuffered read was smaller than block size"};
+static Error errorCantWrite = (Error){.code=errorCodeIoStack, .msg="Writing to file opened as readonly"};
+static Error errorCantRead = (Error){.code=errorCodeIoStack, .msg="Reading from file opened as writeonly"};
+static Error errorReadTooSmall = (Error){.code=errorCodeIoStack, .msg="unbuffered read was smaller than block size"};
 
 
 /**
  * Open a Posix file.
  */
-FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, char *path, int oflags, int perm, Error *error)
+FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, const char *path, int oflags, int perm, Error *error)
 {
     /* Clone ourself. */
     FileSystemBottom *this = fileSystemBottomNew();
@@ -53,7 +53,7 @@ FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, char *path, int oflags,
  * Write data to a file. For efficiency, we like larger buffers,
  * but in a pinch we can write individual bytes.
  */
-size_t fileSystemWrite(FileSystemBottom *this, Byte *buf, size_t bufSize, Error *error)
+size_t fileSystemWrite(FileSystemBottom *this, const Byte *buf, size_t bufSize, Error *error)
 {
     /* Check for errors. TODO: move to ioStack. */
     if (errorIsOK(*error) && !this->writable)
@@ -128,7 +128,7 @@ void fileSystemAbort(FileSystemBottom *this, Error *errorO)
     abort(); /* TODO: not implemented. */
 }
 
-pos_t fileSystemSeek(FileSystemBottom *this, pos_t position, Error *error)
+off_t fileSystemSeek(FileSystemBottom *this, off_t position, Error *error)
 {
     return sys_lseek(this->fd, position, error);
 }

@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/fcntl.h>
-#include "file/ioStack.h"
+#include "iostack.h"
 #include "file/fileSystemBottom.h"
 
 #include "framework/fileFramework.h"

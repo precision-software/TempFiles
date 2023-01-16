@@ -6,7 +6,7 @@
 #include "fileSplit/fileSplit.h"
 #include "compress/lz4/lz4.h"
 
-#include "file/ioStack.h"
+#include "iostack.h"
 #include "file/buffered.h"
 #include "file/fileSystemBottom.h"
 

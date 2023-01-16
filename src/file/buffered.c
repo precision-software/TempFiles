@@ -25,7 +25,7 @@
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
 #include <assert.h>
-#include "common/error.h"
+#include "iostack_error.h"
 #include "common/passThrough.h"
 #include "common/debug.h"
 
@@ -60,16 +60,16 @@ struct Buffered
 /* Forward references */
 size_t bufferedSeek(Buffered *this, size_t position, Error *error);
 static size_t copyOut(Buffered *this, Byte *buf, size_t size);
-static size_t copyIn(Buffered *this, Byte *buf, size_t size);
+static size_t copyIn(Buffered *this, const Byte *buf, size_t size);
 static bool flushBuffer(Buffered *this, Error *error);
 static bool fillBuffer(Buffered *this, Error *error);
-size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error);
+size_t directWrite(Buffered *this, const Byte *buf, size_t size, Error *error);
 size_t directRead(Buffered *this, Byte *buf, size_t size, Error *error);
 
 /**
  * Open a buffered file, reading, writing or both.
  */
-Buffered *bufferedOpen(Buffered *pipe, char *path, int oflags, int perm, Error *error)
+Buffered *bufferedOpen(Buffered *pipe, const char *path, int oflags, int perm, Error *error)
 {
     /* Below us, we need to read/modify/write even if write only. */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
@@ -107,7 +107,7 @@ Buffered *bufferedOpen(Buffered *pipe, char *path, int oflags, int perm, Error *
 /**
  * Write data to the buffered file.
  */
-size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
+size_t bufferedWrite(Buffered *this, const Byte *buf, size_t size, Error* error)
 {
     debug("bufferedWrite: size=%zu  position=%zu \n", size, this->position);
     assert(size > 0);
@@ -156,7 +156,7 @@ size_t bufferedWrite(Buffered *this, Byte *buf, size_t size, Error* error)
 /*
  * Optimize writes by going directly to the next file if we don't need buffering.
  */
-size_t directWrite(Buffered *this, Byte *buf, size_t size, Error *error)
+size_t directWrite(Buffered *this, const Byte *buf, size_t size, Error *error)
 {
     /* Write out multiple blocks, but no partials */
     size_t alignedSize = sizeRoundDown(size, this->blockSize);
@@ -408,7 +408,7 @@ static bool fillBuffer (Buffered *this, Error *error)
 
 
 /* Copy user data from the user, respecting boundaries */
-static size_t copyIn(Buffered *this, Byte *buf, size_t size)
+static size_t copyIn(Buffered *this, const Byte *buf, size_t size)
 {
     /* Copy bytes into the buffer, up to end of data or end of buffer */
     size_t offset = this->position - this->bufPosition;

@@ -11,6 +11,7 @@
 #ifndef COMMON_PASSTHROUGH_H
 #define COMMON_PASSTHROUGH_H
 #include "common/filter.h"
+#include "iostack.h"
 
 extern FilterInterface passThroughInterface;
 #define passThrough(Event, this, ...)   ((Filter*)this)->next##Event->iface->fn##Event(((Filter*)this)->next##Event, __VA_ARGS__)
@@ -26,20 +27,19 @@ extern FilterInterface passThroughInterface;
 
 
 /* Helper function to ensure all the data is written. */
-size_t passThroughWriteAll(void *this, Byte *buf, size_t size, Error *error);
+size_t passThroughWriteAll(void *this, const Byte *buf, size_t size, Error *error);
 size_t passThroughReadAll(void *this, Byte *buf, size_t size, Error *error);
 size_t passThroughReadSized(void *this, Byte *header, size_t size, Error *error);
 size_t passThroughWriteSized(void *this, Byte *header, size_t size, Error *error);
 
 /* Helper functions to read/write integers in network byte order (big endian) */
-bool passThroughPut1(void *this, size_t value, Error *error);
-bool passThroughPut2(void *this, size_t value, Error *error);
-bool passThroughPut4(void *this, size_t value, Error *error);
-bool passThroughPut8(void *this, size_t value, Error *error);
-size_t passThroughGet1(void *this, Error *error);
-size_t passThroughGet2(void *this, Error *error);
-size_t passThroughGet4(void *this, Error *error);
-size_t passThroughGet8(void *this, Error *error);
-
+#define passThroughPut1(this, value, error)  filePut1(this, value, error)
+#define passThroughPut2(this, value, error)  filePut2(this, value, error)
+#define passThroughPut4(this, value, error)  filePut4(this, value, error)
+#define passThroughPut8(this, value, error)  filePut8(this, value, error)
+#define passThroughGet1(this, error)         fileGet1(this, error)
+#define passThroughGet2(this, error)         fileGet2(this, error)
+#define passThroughGet4(this, error)         fileGet4(this, error)
+#define passthroughGet8(this, error)         fileGet8(this, errorO)
 
 #endif /* COMMON_PASSTHROUGH_H */

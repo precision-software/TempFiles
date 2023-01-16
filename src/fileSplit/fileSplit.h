@@ -10,11 +10,11 @@
 
 typedef struct FileSplit FileSplit;
 
-typedef void (*PathGetter) (void *data, char *name, size_t segmentIdx, char path[PATH_MAX]);
+typedef void (*PathGetter) (void *data, const char *name, size_t segmentIdx, char path[PATH_MAX]);
 
 FileSplit *fileSplitNew(size_t segmentSize, PathGetter pathGet, void *pathData, void *next);
 
 
-void formatPath(void *fmt, char *name, size_t segmentIdx, char path[PATH_MAX]);
+void formatPath(void *fmt, const char *name, size_t segmentIdx, char path[PATH_MAX]);
 
 #endif /*FILTER_FILESPLIT_H */

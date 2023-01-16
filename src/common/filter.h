@@ -48,14 +48,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "common/error.h"
+#include "iostack_error.h"
 
 #define BEGIN do {
 #define END   } while (0)
 
 /* We support 64 bit seeks, either to blocks or bytes. */
-typedef uint64_t pos_t;
-#define FILE_END_POSITION ((pos_t)-1)
+#define FILE_END_POSITION ((off_t)-1)
 
 #define MAX_BLOCK_SIZE (16*1024*1024)
 
@@ -83,14 +82,14 @@ typedef struct Filter {
 /***********************************************************************************************************************************
 A set of functions a filter provides, one for each type of event.
 ***********************************************************************************************************************************/
-typedef Filter *(*FilterOpen)(void *this, char *path, int mode, int perm, Error *error);
+typedef Filter *(*FilterOpen)(void *this, const char *path, int mode, int perm, Error *error);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
-typedef size_t (*FilterWrite)(void *this, Byte *buf, size_t size, Error *error);
+typedef size_t (*FilterWrite)(void *this, const Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
 typedef void (*FilterSync)(void *this, Error *error);
 typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
-typedef pos_t (*FilterSeek)(void *this, pos_t position, Error *error);
+typedef off_t (*FilterSeek)(void *this, off_t position, Error *error);
 typedef size_t (*FilterBlockSize)(void *this, size_t size, Error *error);
 typedef size_t (*FilterDelete)(void *this, char *path, Error *error);
 

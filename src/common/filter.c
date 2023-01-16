@@ -37,5 +37,5 @@ void *filterInit(void *thisVoid, FilterInterface *iface, void *next)
 
 void badSeek(Filter *this, size_t position, Error *error)
 {
-    filterError(error, "Filter does not implement Seek().");
+	ioStackError(error, "Filter does not implement Seek().");
 }

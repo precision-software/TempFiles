@@ -26,7 +26,7 @@
 #include "common/debug.h"
 #include "common/passThrough.h"
 #include "fileSplit/fileSplit.h"
-#include "file/ioStack.h"
+#include "iostack.h"
 
 /* Structure defining the state for read/writing a group of split files */
 struct FileSplit
@@ -47,12 +47,12 @@ struct FileSplit
     IoStack *file;     /* points to the current open file segment, null otherwise */
 };
 
-static const Error errorPathTooLong = (Error){.code=errorCodeFilter, .msg="File path is too long"};
+static const Error errorPathTooLong = (Error){.code=errorCodeIoStack, .msg="File path is too long"};
 
 static void closeCurrentSegment(FileSplit *this, Error *error);
 static void openCurrentSegment(FileSplit *this, Error *error);
-pos_t fileSplitSeekEnd(FileSplit *this, Error *error);
-void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *error);
+off_t fileSplitSeekEnd(FileSplit *this, Error *error);
+void deleteHigherSegments(FileSplit *this, const char *name, size_t segmentNr, Error *error);
 
 /**
  * Open a set of split files. These are a group of files which, when appended
@@ -64,7 +64,7 @@ void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *
  * @param error  - Error handling, both input and output.
  * @return       - A handle which can be used to access the opened file.
  */
-FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Error *error)
+FileSplit *fileSplitOpen(FileSplit *self, const char *name, int oflags, int perm, Error *error)
 {
     /* Clone the following pipeline. A forced error will simply clone the pipeline and not open it. */
     Error ignoreError = errorEOF;
@@ -77,13 +77,13 @@ FileSplit *fileSplitOpen(FileSplit *self, char *name, int oflags, int perm, Erro
 
     /* We do not support O_APPEND directly. */
     if (oflags & O_APPEND)
-        return (filterError(error, "fileSplit does not support O_APPEND - must use Buffered filter"), this);
+        return (ioStackError(error, "fileSplit does not support O_APPEND - must use Buffered filter"), this);
 
     /* Save the open parameters since we will use them when opening each segment. */
     this->oflags = oflags;
     this->perm = perm;
     if (strlen(name) >= sizeof(this->name))
-        return (filterError(error, "fileSplitOpen: path name too long"), this);
+        return (ioStackError(error, "fileSplitOpen: path name too long"), this);
     strcpy(this->name, name);
 
     /* Position at the beginning of the first segment, possibly truncating it */
@@ -131,14 +131,14 @@ size_t fileSplitRead(FileSplit *this, Byte *buf, size_t size, Error *error)
     return actual;
 }
 
-pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
+off_t fileSplitSeek(FileSplit *this, off_t position, Error *error)
 {
     /* Special case for seeking to end */
     if (position == FILE_END_POSITION)
         return fileSplitSeekEnd(this, error);
 
     /* Set the new seek position */
-    pos_t oldPosition =  this->position;
+    off_t oldPosition =  this->position;
     this->position = position;
 
     /* If we are seeking to a different segment, then open the new segment */
@@ -146,7 +146,7 @@ pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
         openCurrentSegment(this, error);
 
     /* Seek to the corresponding position in the new segment */
-    pos_t offset = position % this->segmentSize;
+    off_t offset = position % this->segmentSize;
     fileSeek(this->file, offset, error);
 
     return position;
@@ -155,7 +155,7 @@ pos_t fileSplitSeek(FileSplit *this, pos_t position, Error *error)
 /*
  * Special case of seeking to the end of the file set.
  */
-pos_t fileSplitSeekEnd(FileSplit *this, Error *error)
+off_t fileSplitSeekEnd(FileSplit *this, Error *error)
 {
     /* Scan looking for last (partial) segment */
     /* TODO: make it a binary search instead of linear */
@@ -182,7 +182,7 @@ pos_t fileSplitSeekEnd(FileSplit *this, Error *error)
 /**
  * Write to a group of split files, creating new segments if appropriate.
  */
-size_t fileSplitWrite(FileSplit *this, Byte *buf, size_t size, Error *error)
+size_t fileSplitWrite(FileSplit *this, const Byte *buf, size_t size, Error *error)
 {
     if (isError(*error)) return 0;
 
@@ -292,7 +292,7 @@ FileSplit *fileSplitNew(size_t suggestedSize, PathGetter getPath, void *pathData
 }
 
 
-bool deleteSegment(FileSplit *this, char *name, size_t segmentIdx, Error *error)
+bool deleteSegment(FileSplit *this, const char *name, size_t segmentIdx, Error *error)
 {
     char path[PATH_MAX];
     this->getPath(this->pathData, name, segmentIdx, path);
@@ -302,7 +302,7 @@ bool deleteSegment(FileSplit *this, char *name, size_t segmentIdx, Error *error)
 }
 
 
-void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *error)
+void deleteHigherSegments(FileSplit *this, const char *name, size_t segmentNr, Error *error)
 {
     /* Delete segments, allowing some failures just in case there are missing segments */
     for (int failures=0; failures < 10 && errorIsOK(*error); failures++)
@@ -323,7 +323,7 @@ void deleteHigherSegments(FileSplit *this, char *name, size_t segmentNr, Error *
  * A typical segment name generator which uses a format statement to combine
  * the fileset name with segment index.
  */
-void formatPath(void *fmt, char *name, size_t segmentIdx, char path[PATH_MAX])
+void formatPath(void *fmt, const char *name, size_t segmentIdx, char path[PATH_MAX])
 {
     snprintf(path, PATH_MAX, fmt, name, segmentIdx);
 }

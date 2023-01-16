@@ -1,68 +1,46 @@
+
+project(IoStack C)
+
 cmake_minimum_required(VERSION 3.23)
-project(filter C)
-
 set(CMAKE_C_STANDARD 99)
-include_directories(src /opt/local/include test)
-link_directories(/opt/local/lib /opt/homebrew/Cellar/openssl@1.1/1.1.1s/lib)
 
-add_executable(rawTest test/rawTest.c
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h)
+find_package(OpenSSL)
+#find_package(lz4)
 
-add_executable(bufferedTest test/bufferedTest.c
-        src/file/buffered.c src/file/buffered.h
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h)
 
-add_executable(aeadTest test/aeadTest.c
-        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h
-        src/file/buffered.c src/file/buffered.h)
-target_link_libraries(aeadTest crypto)
+# Build a library consisting of all sources under "src"
+file(GLOB_RECURSE SOURCES RELATIVE ${CMAKE_SOURCE_DIR} "src/*.c")
+add_library(iostack STATIC ${SOURCES})
+set_target_properties(iostack PROPERTIES POSITION_INDEPENDENT_CODE on)
 
-add_executable(lz4Test test/lz4Test.c
-        src/compress/lz4/lz4.c  src/compress/lz4/lz4.h  src/file/buffered.h src/file/buffered.c
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h
-        src/file/buffered.c src/file/buffered.h)
-target_link_libraries(lz4Test lz4)
+target_include_directories(iostack
+        PUBLIC
+        /opt/local/include
+        )
 
-add_executable(fileSplitTest test/fileSplitTest.c
-        src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
-        src/file/buffered.c src/file/buffered.h
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h)
+install(TARGETS iostack
+        ARCHIVE DESTINATION "/opt/local/lib"
+        )
 
-add_executable(kitchenSinkTest test/kitchenSinkTest.c
-        src/encrypt/libcrypto/aead.c src/encrypt/libcrypto/aead.h
-        src/compress/lz4/lz4.c  src/compress/lz4/lz4.h
-        src/fileSplit/fileSplit.c src/fileSplit/fileSplit.h
-        src/file/buffered.c src/file/buffered.h
-        test/framework/unitTestInternal.h test/framework/fileFramework.c test/framework/fileFramework.h test/framework/unitTest.h
-        src/common/filter.c src/common/filter.h
-        src/common/passThrough.c src/common/passThrough.h
-        src/file/fileSystemBottom.c src/file/fileSystemBottom.h
-        src/common/error.h src/file/ioStack.h src/file/ioStack.c
-        src/common/syscall.c src/common/syscall.h)
-target_link_libraries(kitchenSinkTest lz4 crypto)
+install(FILES
+        src/iostack.h
+        src/iostack_error.h
+        DESTINATION "/opt/local/include"
+        )
+
+install(FILES
+        iostackConfig.cmake
+        DESTINATION "/opt/local/lib/cmake/iostack" )
+
+
+# Build test programs
+include_directories(src test)
+link_directories(/opt/local/lib)
+link_libraries(iostack crypto  lz4)
+
+add_executable(rawTest test/rawTest.c test/framework/fileFramework.c)
+add_executable(bufferedTest test/bufferedTest.c test/framework/fileFramework.c)
+add_executable(fileSplitTest test/fileSplitTest.c test/framework/fileFramework.c)
+add_executable(aeadTest test/aeadTest.c test/framework/fileFramework.c)
+add_executable(lz4Test test/lz4Test.c test/framework/fileFramework.c)
+add_executable(kitchenSinkTest test/kitchenSinkTest.c test/framework/fileFramework.c)

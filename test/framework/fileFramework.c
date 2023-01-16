@@ -8,7 +8,7 @@
 #include "file/buffered.h"
 #include "file/fileSystemBottom.h"
 #include "compress/lz4/lz4.h"
-#include "file/ioStack.h"
+#include "iostack.h"
 #include "fileSplit/fileSplit.h"
 
 #include "framework/fileFramework.h"
@@ -175,7 +175,7 @@ void appendFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
     Byte *buf = malloc(blockSize);
 
     /* Seek to the end of the file - should match file size */
-    pos_t endPosition = fileSeek(file, FILE_END_POSITION, &error);
+    off_t endPosition = fileSeek(file, FILE_END_POSITION, &error);
     PG_ASSERT_OK(error);
     PG_ASSERT_EQ(fileSize, endPosition);
 
