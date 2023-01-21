@@ -49,11 +49,11 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
  *   - doesn't align with typical block sizes, and
  *   - is compressible.
  */
-void generateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
+void generateFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("generateFile: path=%s\n", path);
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
+    fileOpen(file, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     Byte *buf = malloc(bufferSize);
 
     size_t position;
@@ -72,11 +72,11 @@ void generateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
 }
 
 /* Verify a file has the correct data */
-void verifyFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
+void verifyFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("verifyFile: path=%s\n", path);
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
+    fileOpen(file, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
 
@@ -104,12 +104,12 @@ void verifyFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
  *   - doesn't align with typical block sizes, and
  *   - is compressible.
  */
-void allocateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
+void allocateFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("allocateFile: path=%s\n", path);
     /* Start out by allocating space and filling the file with "X"s. */
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
+    fileOpen(file, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(bufferSize);
     memset(buf, 'X', bufferSize);
@@ -131,7 +131,7 @@ void allocateFile(IoStack *pipe, char *path, size_t fileSize, size_t bufferSize)
 
 static const int prime = 3197;
 
-void generateRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
+void generateRandomFile(IoStack *file, char *path, size_t fileSize, size_t blockSize)
 {
     debug("generateRandomFile: path=%s\n", path);
     /* The nr of blocks must be relatively prime to "prime", otherwise we won't visit all the blocks. */
@@ -139,7 +139,7 @@ void generateRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t block
     PG_ASSERT( nrBlocks == 0 || (nrBlocks % prime) != 0);
 
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_RDWR, 0, &error);
+    fileOpen(file, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -166,11 +166,11 @@ void generateRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t block
     PG_ASSERT_OK(error);
 }
 
-void appendFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
+void appendFile(IoStack *file, char *path, size_t fileSize, size_t blockSize)
 {
     debug("appendFile: path=%s\n", path);
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_RDWR, 0, &error);
+    fileOpen(file, path, O_RDWR, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -191,18 +191,18 @@ void appendFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
     fileClose(file, &error);
     PG_ASSERT_OK(error);
 
-    verifyFile(pipe, path, fileSize+blockSize, blockSize);
+    verifyFile(file, path, fileSize+blockSize, blockSize);
 }
 
 /*
  * Verify a file has the correct data through randomlike seeks.
  * This should do a complete verification - examining every byte of the file.
  */
-void verifyRandomFile(IoStack *pipe, char *path, size_t fileSize, size_t blockSize)
+void verifyRandomFile(IoStack *file, char *path, size_t fileSize, size_t blockSize)
 {
     debug("verifyRandomFile: path=%s\n", path);
     Error error = errorOK;
-    IoStack *file = fileOpen(pipe, path, O_RDONLY, 0, &error);
+    fileOpen(file, path, O_RDONLY, 0, &error);
     PG_ASSERT_OK(error);
     Byte *buf = malloc(blockSize);
 
@@ -236,12 +236,45 @@ void deleteFile(IoStack *pipe, char *name)
 }
 
 
+void openFile(IoStack *pipe, char *name)
+{
+	Error error = errorOK;
+	fileOpen(pipe, "BADNAME", O_RDWR, 0, &error);
+	PG_ASSERT_ERRNO(error, ENOENT);
+
+	error = errorOK;
+	fileOpen(pipe, "BADNAME2", O_RDONLY, 0, &error);
+	PG_ASSERT_ERRNO(error, ENOENT);
+
+	error = errorOK;
+	fileOpen(pipe, "GOODNAME", O_CREAT | O_WRONLY, 0, &error);
+	fileClose(pipe, &error);
+	PG_ASSERT_OK(error);
+
+	fileOpen(pipe, "GOODNAME", O_RDONLY, 0, &error);
+	fileClose(pipe, &error);
+	PG_ASSERT_OK(error);
+
+	fileClose(pipe, &error);
+	PG_ASSERT_OK(error);
+
+	fileClose(pipe, &error);
+	PG_ASSERT_OK(error);
+
+	deleteFile(pipe, "GOODNAME");
+}
+
+
+
+
 /* Run a test on a single configuration determined by file size and buffer size */
 void singleSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
     beginTest(fileName);
+
+	openFile(pipe, fileName);
 
     /* create and read back as a stream */
     generateFile(pipe, fileName, fileSize, bufferSize);
@@ -286,6 +319,8 @@ void singleStreamTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t buff
 
     beginTest(fileName);
 
+	openFile(pipe, fileName);
+
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
 
@@ -318,6 +353,8 @@ void singleReadSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bu
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
 
     beginTest(fileName);
+
+	openFile(pipe, fileName);
 
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);

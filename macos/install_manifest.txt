@@ -1,0 +1,14 @@
+/opt/local/lib/libiostack.a
+/usr/local/include/iostack/compress/lz4/lz4.h
+/usr/local/include/iostack/file/buffered.h
+/usr/local/include/iostack/file/fileSystemBottom.h
+/usr/local/include/iostack/iostack_error.h
+/usr/local/include/iostack/common/packed.h
+/usr/local/include/iostack/common/debug.h
+/usr/local/include/iostack/common/passThrough.h
+/usr/local/include/iostack/common/filter.h
+/usr/local/include/iostack/common/syscall.h
+/usr/local/include/iostack/iostack.h
+/usr/local/include/iostack/fileSplit/fileSplit.h
+/usr/local/include/iostack/encrypt/libcrypto/aead.h
+/usr/local/lib/pkg-config/iostack/iostack.pc

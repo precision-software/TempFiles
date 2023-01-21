@@ -108,7 +108,11 @@ size_t dummyBlockSize(Filter *this, size_t size, Error *error)
     return passThroughBlockSize(this, size, error);
 }
 
+
+
 /*
  * Defines a "no-op" filter, mainly to use as a placeholder.
  */
-FilterInterface passThroughInterface = (FilterInterface) {.fnBlockSize = (FilterBlockSize)dummyBlockSize};
+FilterInterface passThroughInterface = (FilterInterface) {
+	.fnBlockSize = (FilterBlockSize)dummyBlockSize,
+	};

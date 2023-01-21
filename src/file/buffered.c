@@ -69,17 +69,14 @@ size_t directRead(Buffered *this, Byte *buf, size_t size, Error *error);
 /**
  * Open a buffered file, reading, writing or both.
  */
-Buffered *bufferedOpen(Buffered *pipe, const char *path, int oflags, int perm, Error *error)
+void bufferedOpen(Buffered *this, const char *path, int oflags, int perm, Error *error)
 {
     /* Below us, we need to read/modify/write even if write only. */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
         oflags = (oflags & ~O_ACCMODE) | O_RDWR;
 
     /* Open the downstream file and clone ourselves */
-    Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
-    Buffered *this = bufferedNew(pipe->suggestedSize, next);
-    if (isError(*error))
-        return this;
+    passThroughOpen(this, path, oflags, perm, error);
 
     /* Are we read/writing or both? */
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
@@ -99,8 +96,6 @@ Buffered *bufferedOpen(Buffered *pipe, const char *path, int oflags, int perm, E
 
     /* We don't know block size yet, so we will allocate buffer in the Size event */
     this->buf = NULL;
-
-    return this;
 }
 
 
@@ -282,6 +277,7 @@ size_t bufferedSeek(Buffered *this, size_t position, Error *error)
  */
 void bufferedClose(Buffered *this, Error *error)
 {
+	debug("bufferedClose: ", this->bufActual, this->position, this->blockSize);
     /* Flush our buffers. */
     flushBuffer(this, error);
 
@@ -291,8 +287,8 @@ void bufferedClose(Buffered *this, Error *error)
     this->readable = this->writeable = false;
     if (this->buf != NULL)
         free(this->buf);
-    free(this);
-
+	this->buf = NULL;
+	debug("bufferedClose(end): msg=%s\n", error->msg);
 }
 
 
@@ -335,6 +331,19 @@ size_t bufferedBlockSize(Buffered *this, size_t prevSize, Error *error)
 }
 
 
+void *bufferedClone(Buffered *this)
+{
+	return bufferedNew(this->suggestedSize, passThroughClone(this));
+}
+
+void bufferedFree(Buffered *this)
+{
+	passThroughFree(this);
+	if (this->buf != NULL)
+		free(this->buf);
+	free(this);
+}
+
 FilterInterface bufferedInterface = (FilterInterface)
     {
          .fnOpen = (FilterOpen)bufferedOpen,
@@ -344,6 +353,8 @@ FilterInterface bufferedInterface = (FilterInterface)
          .fnSync = (FilterSync)bufferedSync,
          .fnBlockSize = (FilterBlockSize)bufferedBlockSize,
          .fnSeek = (FilterSeek)bufferedSeek,
+		 .fnClone = (FilterClone)bufferedClone,
+		 .fnFree = (FilterFree)bufferedFree,
     } ;
 
 

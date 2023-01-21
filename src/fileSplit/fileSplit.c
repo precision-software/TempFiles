@@ -44,7 +44,6 @@ struct FileSplit
     char name[PATH_MAX];  /* Name of the overall file set, used to calculate segment names. */
     int oflags;           /* The mode we open each segment in. */
     int perm;             /* If creating files, use this permission. */
-    IoStack *file;     /* points to the current open file segment, null otherwise */
 };
 
 static const Error errorPathTooLong = (Error){.code=errorCodeIoStack, .msg="File path is too long"};
@@ -64,36 +63,27 @@ void deleteHigherSegments(FileSplit *this, const char *name, size_t segmentNr, E
  * @param error  - Error handling, both input and output.
  * @return       - A handle which can be used to access the opened file.
  */
-FileSplit *fileSplitOpen(FileSplit *self, const char *name, int oflags, int perm, Error *error)
+void fileSplitOpen(FileSplit *this, const char *name, int oflags, int perm, Error *error)
 {
-    /* Clone the following pipeline. A forced error will simply clone the pipeline and not open it. */
-    Error ignoreError = errorEOF;
-    Filter *clone = passThroughOpen(self, "", oflags, perm, &ignoreError);
-
-    /* Clone ourselves */
-    FileSplit *this = fileSplitNew(self->suggestedSize, self->getPath, self->pathData, clone);
-    if (isError(*error))
-        return this;
-
+	debug("fileSplitOpen: name=%s\n", name);
     /* We do not support O_APPEND directly. */
     if (oflags & O_APPEND)
-        return (ioStackError(error, "fileSplit does not support O_APPEND - must use Buffered filter"), this);
+        return (void)ioStackError(error, "fileSplit does not support O_APPEND - must use Buffered filter");
 
     /* Save the open parameters since we will use them when opening each segment. */
     this->oflags = oflags;
     this->perm = perm;
     if (strlen(name) >= sizeof(this->name))
-        return (ioStackError(error, "fileSplitOpen: path name too long"), this);
+        return (void)ioStackError(error, "fileSplitOpen: path name too long");
     strcpy(this->name, name);
+
+	/* If truncating, remove subsequent segments. */
+	if ( (oflags & O_TRUNC) == O_TRUNC)
+		deleteHigherSegments(this, name, 1, error);
 
     /* Position at the beginning of the first segment, possibly truncating it */
     this->position = 0;
-    this->file = NULL;
     openCurrentSegment(this, error);
-
-    /* If truncating, remove subsequent segments. */
-    if ( (oflags & O_TRUNC) == O_TRUNC)
-        deleteHigherSegments(this, name, 1, error);
 
     /* We may need to create future segments, so add O_CREAT */
     if ((this->oflags & O_ACCMODE) != O_RDONLY)
@@ -104,8 +94,7 @@ FileSplit *fileSplitOpen(FileSplit *self, const char *name, int oflags, int perm
      * We do NOT want to truncate segments when reopening them
      */
     this->oflags &= ~O_TRUNC;
-
-    return this;
+	debug("fileSplitOpen(done): name=%s msg=%s\n", name, error->msg);
 }
 
 /**
@@ -120,7 +109,7 @@ size_t fileSplitRead(FileSplit *this, Byte *buf, size_t size, Error *error)
     size_t truncSize = sizeMin( this->segmentSize - start, size);
 
     /* Read the possibly truncated buffer. */
-    size_t actual = fileRead(this->file, buf, truncSize, error);
+    size_t actual = passThroughRead(this, buf, truncSize, error);
     this->position += actual;
 
     /* If we just finished reading an entire segment, advance to the next segment. */
@@ -147,7 +136,7 @@ off_t fileSplitSeek(FileSplit *this, off_t position, Error *error)
 
     /* Seek to the corresponding position in the new segment */
     off_t offset = position % this->segmentSize;
-    fileSeek(this->file, offset, error);
+    passThroughSeek(this, offset, error);
 
     return position;
 }
@@ -168,7 +157,7 @@ off_t fileSplitSeekEnd(FileSplit *this, Error *error)
         /* Get the size of the next segment */
         this->position = segmentCount * this->segmentSize;
         openCurrentSegment(this, error);
-        segmentSize = fileSeek(this->file, FILE_END_POSITION, error);
+        segmentSize = passThroughSeek(this, FILE_END_POSITION, error);
 
         /* Done when we find a partial segment */
         if (segmentSize != this->segmentSize)
@@ -191,7 +180,7 @@ size_t fileSplitWrite(FileSplit *this, const Byte *buf, size_t size, Error *erro
     size_t truncSize = sizeMin( this->segmentSize - offset, size);
 
     /* Write the possibly truncated buffer. */
-    size_t actual = fileWrite(this->file, buf, truncSize, error);
+    size_t actual = passThroughWrite(this, buf, truncSize, error);
     this->position += actual;
 
     /* If we have filled the current segment, then open up the next segment. */
@@ -207,9 +196,9 @@ size_t fileSplitWrite(FileSplit *this, const Byte *buf, size_t size, Error *erro
  */
 void fileSplitClose(FileSplit *this, Error *error)
 {
-    closeCurrentSegment(this, error);
+	debug("fileSplitClose name=%zu\n", this->name);
     passThroughClose(this, error);
-    free(this);
+	debug("fileSplitClose(done) name=%zu  msg=%s\n", this->name, error->msg);
 }
 
 /*
@@ -221,23 +210,13 @@ void fileSplitDelete(FileSplit *this, char *name, Error *error)
 }
 
 /**
- * Close the currently active segment.
- */
-static void closeCurrentSegment(FileSplit *this, Error *error)
-{
-    if (this->file != NULL)
-        fileClose(this->file, error);
-    this->file = NULL;
-}
-
-
-/**
  * Open the segment corresponding to this->position.
  */
 void openCurrentSegment(FileSplit *this, Error *error)
 {
+	debug("FileSplit:openCurrentSegment: position=%zu  name=%s\n", this->position, this->name);
     /* Close the current segment if opened */
-    closeCurrentSegment(this, error);
+    passThroughClose(this, error);
 
     /* Generate the path to the new file segment. */
     size_t segmentIdx = this->position / this->segmentSize;
@@ -245,7 +224,8 @@ void openCurrentSegment(FileSplit *this, Error *error)
     this->getPath(this->pathData, this->name, segmentIdx, path);
 
     /* Open the new file segment. */
-    this->file = ioStackNew(passThroughOpen(this, path, this->oflags, this->perm, error));
+    passThroughOpen(this, path, this->oflags, this->perm, error);
+	debug("FileSplit::openCurrentSegment(done) path=%s\n", path);
 }
 
 /**
@@ -262,6 +242,18 @@ size_t fileSplitBlockSize(FileSplit *this, size_t blockSize, Error *error)
     return nextSize;
 }
 
+void *fileSplitClone(FileSplit *this)
+{
+	void *next = passThroughClone(this);
+	return fileSplitNew(this->suggestedSize, this->getPath, this->pathData, next);
+}
+
+void *fileSplitFree(FileSplit *this)
+{
+	passThroughFree(this);
+	free(this);
+}
+
 static FilterInterface fileSplitInterface = {
     .fnClose = (FilterClose)fileSplitClose,
     .fnOpen = (FilterOpen)fileSplitOpen,
@@ -269,7 +261,9 @@ static FilterInterface fileSplitInterface = {
     .fnWrite = (FilterWrite)fileSplitWrite,
     .fnSeek = (FilterSeek)fileSplitSeek,
     .fnBlockSize = (FilterBlockSize)fileSplitBlockSize,
-    .fnDelete = (FilterDelete)fileSplitDelete
+    .fnDelete = (FilterDelete)fileSplitDelete,
+	.fnClone = (FilterClone)fileSplitClone,
+	.fnFree = (FilterFree)fileSplitFree,
 };
 
 /**

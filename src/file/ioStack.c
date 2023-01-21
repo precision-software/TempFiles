@@ -19,31 +19,31 @@ struct IoStack {
 /**
  * Open a file, returning error information.
  */
-IoStack *fileOpen(IoStack *pipe, const char *path, int oflags, int perm, Error *error)
+void fileOpen(IoStack *this, const char *path, int oflags, int perm, Error *error)
 {
+	/* If already opened, raise an error */
+	if (this->open)
+		return (void)ioStackError(error, "Attemptng to open an IoStack which is already open");
 
     /* Appending to a file is tricky for encrypted/compressed files. TODO: let following filters decide O_APPEND */
     bool append = (oflags & O_APPEND) != 0;
     oflags &= (~O_APPEND);
 
     /* Open the downstream file */
-    Filter *next = passThroughOpen(pipe, path, oflags, perm, error);
-
-    /* clone the current filter, pointing to the downstream clone */
-    IoStack *new = ioStackNew(next);
-
-    /* Make note we are open */
-    new->open = true;
+    passThroughOpen(this, path, oflags, perm, error);
 
     /* Negotiate block sizes. We don't place any constraints on block size. */
-    if (errorIsOK(*error))
-        passThroughBlockSize(new, 1, error);
+	passThroughBlockSize(this, 1, error);
 
     /* If we are appending, then seek to the end. */
     if (append)
-        fileSeek(new, FILE_END_POSITION, error);
+		fileSeek(this, FILE_END_POSITION, error);
 
-    return new;
+	/* If we had any problems at all, then abort the open. */
+	if (isError(*error))
+		fileClose(this, error);
+
+	this->open = errorIsOK(*error);
 }
 
 /**
@@ -81,17 +81,37 @@ void fileClose(IoStack *this, Error *error)
     if (errorIsEOF(*error))
         *error = errorOK;
     passThroughClose(this, error);
+	this->open = false;
 
-    /* Release the memory.  Note we could be leaving a dangling pointer, so callers beware. */
-    free(this);
 }
 
-void fileDelete(IoStack *this, char *path, Error *error)
+void fileDelete(IoStack *this, const char *path, Error *error)
 {
     passThroughDelete(this, path, error);
 }
 
+IoStack *fileClone(IoStack *this)
+{
+	return ioStackNew(passThroughClone(this));
+}
 
+void fileFree(IoStack *this)
+{
+	passThroughFree(this);
+	free(this);
+}
+
+size_t fileBlockSize(IoStack *this, size_t blockSize, Error *error)
+{
+	return passThroughBlockSize(this, blockSize, error);
+}
+
+FilterInterface ioStackInterface = (FilterInterface)
+	{
+	.fnBlockSize = (FilterBlockSize)fileBlockSize,
+	.fnClone = (FilterClone)fileClone,
+	.fnFree = (FilterFree)fileFree,
+	};
 /**
  * Create a new File Source for generating File events. Since this is the
  * first element in a pipeline of filters, it is the handle for the entire pipeline.
@@ -100,7 +120,7 @@ IoStack *
 ioStackNew(void *next)
 {
     IoStack *this = malloc(sizeof(IoStack));
-    filterInit(this, &passThroughInterface, next);
+    filterInit(this, &ioStackInterface, next);
 
     this->open = false;
 
@@ -110,7 +130,7 @@ ioStackNew(void *next)
 /*
  * Print a formatted message to the IoStack
  */
-bool filePrintf(void *this, Error *error, char *format, ...)
+bool filePrintf(void *this, Error *error, const char *format, ...)
 {
 	va_list ap;
 	Byte buffer[2048];

@@ -4,7 +4,6 @@
 //#define DEBUG
 #include <stdlib.h>
 #include <lz4.h>
-//#include <lz4frame.h>
 #include "common/debug.h"
 #include "common/filter.h"
 #include "compress/lz4/lz4.h"
@@ -26,11 +25,12 @@ struct Lz4Compress
     Filter filter;
 
     size_t blockSize;                /* Configured size of uncompressed block. */
+
     size_t compressedSize;            /* upper limit on compressed block size */
     Byte *compressedBuf;              /* Buffer to hold compressed data */
     size_t bufActual;                 /* The amount of compressed data in buffer */
 
-    IoStack *indexFile;            /* Index file created "on the fly" to support block seeks. */
+    IoStack *indexFile;               /* Index file created "on the fly" to support block seeks. */
     off_t compressedPosition;         /* The offset of the current compressed block within the compressed file */
 
     Byte *tempBuf;                    /* temporary buffer to hold decompressed data when probing for size */
@@ -39,21 +39,27 @@ struct Lz4Compress
 };
 
 
-Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, const char *path, int oflags, int mode, Error *error)
+void lz4CompressOpen(Lz4Compress *this, const char *path, int oflags, int mode, Error *error)
 {
     debug("lz4Open: path=%s  oflags=0x%x\n", path, oflags);
 
-    /* Open the compressed file and clone ourselves */
-    Filter *next = passThroughOpen(pipe, path, oflags, mode, error);
-    Lz4Compress *this = lz4CompressNew(pipe->blockSize, next);
-    if (isError(*error))
-        return this;
+    /* Open the compressed file */
+    passThroughOpen(this, path, oflags, mode, error);
+	if (isError(*error))
+		return;
 
     /* Open the index file as well. */
     char indexPath[MAXPGPATH];
     strlcpy(indexPath, path, sizeof(indexPath));
     strlcat(indexPath, ".idx", sizeof(indexPath));
-    this->indexFile = ioStackNew(passThroughOpen(this, indexPath, oflags, mode, error));
+	passThroughOpen(this->indexFile, indexPath, oflags, mode, error);
+
+	/* Close the data file if the index file failed to open TODO: longjmp? */
+	if (isError(*error))
+	{
+		passThroughClose(this, error);
+		return;
+	}
 
     /* Make note we are at the start of the compressed file */
     this->compressedPosition = 0;
@@ -61,8 +67,6 @@ Lz4Compress *lz4CompressOpen(Lz4Compress *pipe, const char *path, int oflags, in
 
     /* Do we want to write a file header containing the block size? */
     /* TODO: later. */
-
-    return this;
 }
 
 size_t lz4CompressBlockSize(Lz4Compress *this, size_t prevSize, Error *error)
@@ -208,13 +212,16 @@ off_t lz4CompressSeek(Lz4Compress *this, off_t position, Error *error)
 
 void lz4CompressClose(Lz4Compress *this, Error *error)
 {
+	debug("lz4CompressClose: blockSize=%zu\n", this->blockSize);
     fileClose(this->indexFile, error);
     passThroughClose(this, error);
     if (this->compressedBuf != NULL)
         free(this->compressedBuf);
+	this->compressedBuf = NULL;
     if (this->tempBuf != NULL)
         free(this->tempBuf);
-    free(this);
+	this->tempBuf = NULL;
+	debug("lz4CompressClose: msg=%s\n", error->msg);
 }
 
 
@@ -285,6 +292,27 @@ size_t compressedSize(size_t rawSize)
     return LZ4_compressBound((int)rawSize);
 }
 
+void *lz4CompressClone(Lz4Compress *this)
+{
+	return lz4CompressNew(this->blockSize, passThroughClone(this));
+
+}
+
+void lz4CompressFree(Lz4Compress *this)
+{
+	passThroughFree(this);
+	fileFree(this->indexFile);
+
+	if (this->compressedBuf != NULL)
+		free(this->compressedBuf);
+	this->compressedBuf = NULL;
+	if (this->tempBuf != NULL)
+		free(this->tempBuf);
+	this->tempBuf = NULL;
+
+	free(this);
+}
+
 
 FilterInterface lz4CompressInterface = (FilterInterface) {
     .fnOpen = (FilterOpen)lz4CompressOpen,
@@ -293,7 +321,9 @@ FilterInterface lz4CompressInterface = (FilterInterface) {
     .fnWrite = (FilterWrite)lz4CompressWrite,
     .fnSeek = (FilterSeek)lz4CompressSeek,
     .fnBlockSize = (FilterBlockSize)lz4CompressBlockSize,
-    .fnDelete = (FilterDelete)lz4CompressDelete
+    .fnDelete = (FilterDelete)lz4CompressDelete,
+	.fnClone = (FilterClone)lz4CompressClone,
+	.fnFree = (FilterFree)lz4CompressFree,
 };
 
 
@@ -306,5 +336,12 @@ Lz4Compress *lz4CompressNew(size_t blockSize, void *next)
     Lz4Compress *this = malloc(sizeof(Lz4Compress));
     *this = (Lz4Compress){.blockSize = blockSize};
     filterInit(this, &lz4CompressInterface, next);
+
+	/* Save the requested plain text block size */
+	this->blockSize = blockSize;
+
+	/* Since we are opening a second index file, clone our downstream I/O stack */
+	this->indexFile = fileClone(this);
+
     return this;
 }

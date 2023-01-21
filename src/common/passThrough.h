@@ -14,16 +14,27 @@
 #include "iostack.h"
 
 extern FilterInterface passThroughInterface;
+
+/* Help macros to invoke the next(lower) level of the I/O stack */
 #define passThrough(Event, this, ...)   ((Filter*)this)->next##Event->iface->fn##Event(((Filter*)this)->next##Event, __VA_ARGS__)
+#define passThroughNoArgs(Event, this)   ((Filter*)this)->next##Event->iface->fn##Event(((Filter*)this)->next##Event)
+
+/* File operations */
 #define passThroughOpen(this, path, oflags, mode, error) passThrough(Open, this, path, oflags, mode, error)
+#define passThroughBlockSize(this, size, error) passThrough(BlockSize, this, size, error)
+#define passThroughClose(this, error) passThrough(Close, this, error)
+#define passThroughDelete(this, path, error) passThrough(Delete, this, path, error)
+
+/* IO operations */
 #define passThroughRead(this, buf, size, error) passThrough(Read, this, buf, size, error)
 #define passThroughWrite(this, buf, size, error) passThrough(Write, this, buf, size, error)
-#define passThroughClose(this, error) passThrough(Close, this, error)
-#define passThroughAbort(this, error)  passThrough(Abort, this, error)
-#define passThroughSync(this, error) passThrough(Sync, this, error)
 #define passThroughSeek(this, position, error) passThrough(Seek, this, position, error)
-#define passThroughBlockSize(this, size, error) passThrough(BlockSize, this, size, error)
-#define passThroughDelete(this, path, error) passThrough(Delete, this, path, error)
+#define passThroughSync(this, error) passThrough(Sync, this, error)
+
+/* Copy and free */
+#define passThroughClone(this) passThroughNoArgs(Clone, this)
+#define passThroughFree(this) passThroughNoArgs(Free, this)
+
 
 
 /* Helper function to ensure all the data is written. */

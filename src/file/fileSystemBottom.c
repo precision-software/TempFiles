@@ -28,11 +28,8 @@ static Error errorReadTooSmall = (Error){.code=errorCodeIoStack, .msg="unbuffere
 /**
  * Open a Posix file.
  */
-FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, const char *path, int oflags, int perm, Error *error)
+void fileSystemOpen(FileSystemBottom *this, const char *path, int oflags, int perm, Error *error)
 {
-    /* Clone ourself. */
-    FileSystemBottom *this = fileSystemBottomNew();
-
     /* Check the oflags we are opening the file in. TODO: move checks to ioStack. */
     this->writable = (oflags & O_ACCMODE) != O_RDONLY;
     this->readable = (oflags & O_ACCMODE) != O_WRONLY;
@@ -44,8 +41,6 @@ FileSystemBottom *fileSystemOpen(FileSystemBottom *sink, const char *path, int o
 
     /* Open the file and check for errors. */
     this->fd = sys_open(path, oflags, perm, error);
-
-    return this;
 }
 
 
@@ -87,8 +82,9 @@ size_t fileSystemRead(FileSystemBottom *this, Byte *buf, size_t size, Error *err
 void fileSystemClose(FileSystemBottom *this, Error *error)
 {
     /* Close the fd if it was opened earlier. */
-    sys_close(this->fd, error);
-    free(this);
+	if (this->fd != -1)
+        sys_close(this->fd, error);
+	this->fd = -1;
 }
 
 
@@ -143,6 +139,16 @@ void fileSystemDelete(FileSystemBottom *this, char *path, Error *error)
 
 }
 
+void *fileSystemClone(FileSystemBottom *this)
+{
+	return fileSystemBottomNew();
+}
+
+void fileSystemFree(FileSystemBottom *this)
+{
+	free(this);
+}
+
 FilterInterface fileSystemInterface = (FilterInterface)
 {
     .fnOpen = (FilterOpen)fileSystemOpen,
@@ -153,7 +159,9 @@ FilterInterface fileSystemInterface = (FilterInterface)
     .fnBlockSize = (FilterBlockSize)fileSystemBlockSize,
     .fnAbort = (FilterAbort)fileSystemAbort,
     .fnSeek = (FilterSeek)fileSystemSeek,
-    .fnDelete = (FilterDelete)fileSystemDelete
+    .fnDelete = (FilterDelete)fileSystemDelete,
+	.fnClone = (FilterClone)fileSystemClone,
+	.fnFree = (FilterFree)fileSystemFree
 };
 
 

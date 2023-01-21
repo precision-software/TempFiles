@@ -120,23 +120,17 @@ flowchart LR
     sink[FileSystemBottom <hr> read <br> write <br> open <br> close <br> datasync]
 ```
 
-TODO:
-- Seek tests on encrypted files.
-- compression on streamed files.
-- Read seeks on compressed files with record index.
-- Update vocabulary (records, not blocks)
+### TODO:
 - bring code in line with Postgres standards
 - non-static error messages
 - enforce readable/writeable in read/write.
-- test O_APPEND
-- BufFile integration (or equivalent);
-- Multiple Opens? (Needed for random seeks in distributed files)
-- End of File : verify encrypted file actually ends.
+- Explicit clone/free events.
+- If a file fails to open, it should free all resources but leave the I/O Stack intact for another open.
 
 ### Proposed Vocabulary (Not reflected in code yet)
-***CipherBlock*** - A cipher block, 16 bytes for AES.
 <br>***Block*** - A piece of fixed size data which fits in memory.
-<br>***File*** - A collection of fixed size records, where the last record might be smaller.
+<br>***CipherBlock*** - A cipher block, 16 bytes for AES.
+<br>***File*** - A collection of fixed size blocks, where the last block might be smaller.
 <br>Note it is possible to seek to any record in a file.
 <br>***Sized Record*** - A record preceded by its size.
 <br>***File of Sized Records*** - A file consisting of variable sized records. 

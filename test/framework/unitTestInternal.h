@@ -49,6 +49,12 @@ static const char *expectFmt = "Expected '%s' but got '%s'";
             PG_ASSERT_FMT(expectFmt, expectedError.msg, error.msg);                               \
     END
 
+#define PG_ASSERT_ERRNO(error, errno) \
+    BEGIN                             \
+	    PG_ASSERT(errorIsSystem(error)); \
+		PG_ASSERT_EQ(error.code, -(errno)) ; \
+    END
+
 /* Display a formatted message and exit */
 #define PG_ASSERT_FMT(fmt, ...)                                                                                        \
     BEGIN                                                                                                              \

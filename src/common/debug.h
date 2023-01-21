@@ -6,6 +6,7 @@
 
 #include "common/filter.h"
 
+//#define DEBUG
 #ifdef DEBUG
 #define debug(args...) printf(args)
 #else

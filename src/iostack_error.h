@@ -70,5 +70,10 @@ inline static int ioStackError(Error *error, char *msg)
     return setError(error, (Error){.code=errorCodeIoStack, .msg=msg});
 }
 
+/* Report a system error (after receiving -1) */
+inline static int setSystemError(Error *error)
+{
+	return setError(error, systemError());
+}
 
 #endif /*FILTER_ERROR_H */

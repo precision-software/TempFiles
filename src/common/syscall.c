@@ -4,8 +4,11 @@
 //#define DEBUG
 #include <unistd.h>
 #include <sys/fcntl.h>
-#include "common/syscall.h"
+#include <assert.h>
+
+#include "iostack.h"
 #include "common/debug.h"
+#include "common/syscall.h"
 
 
 /**
@@ -14,6 +17,7 @@
  */
 size_t sys_read(int fd, Byte *buf, size_t size, Error *error)
 {
+	assert(size > 0);
     if (isError(*error))
         return 0;
 

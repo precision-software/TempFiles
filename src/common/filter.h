@@ -1,7 +1,7 @@
 /**
  * A Filter processes events, either handling them itself or by passing
- * them "down the Pipeline" to subsequent filters.
- * A sequence of Filters forms a Pipeline, where the first filter is called
+ * them "down the Stack" to subsequent filters.
+ * A sequence of Filters forms an I/O Stack, where the first filter is called
  * a Source and the final filter is called a Sink.
  *
  * Events are geared toward typical file management operations like "Read",
@@ -28,7 +28,7 @@
  * output is not actually fixed size.
  *
  * The "Seek" event allows positioning to a random block. If seeking to FILE_END_POSITION,
- * the event will return the file size and position the file to:   (TODO: Verify ... things have changed)
+ * the event will return the file size and position the file to the last partial block.
  *    1) The beginning of the final partial block, or
  *    2) if no partial blocks, the actial EOF,
  *    3) In some cases, the beginning of the final block, even if full.
@@ -48,13 +48,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "iostack_error.h"
+#include "../iostack_error.h"
 
 #define BEGIN do {
 #define END   } while (0)
-
-/* We support 64 bit seeks, either to blocks or bytes. */
-#define FILE_END_POSITION ((off_t)-1)
 
 #define MAX_BLOCK_SIZE (16*1024*1024)
 
@@ -77,12 +74,14 @@ typedef struct Filter {
     struct Filter *nextBlockSize;
     struct Filter *nextSeek;
     struct Filter *nextDelete;
+	struct Filter *nextClone;
+	struct Filter *nextFree;
 } Filter;
 
 /***********************************************************************************************************************************
 A set of functions a filter provides, one for each type of event.
 ***********************************************************************************************************************************/
-typedef Filter *(*FilterOpen)(void *this, const char *path, int mode, int perm, Error *error);
+typedef void (*FilterOpen)(void *this, const char *path, int mode, int perm, Error *error);
 typedef size_t (*FilterRead)(void *this, Byte *buf, size_t size, Error *error);
 typedef size_t (*FilterWrite)(void *this, const Byte *buf, size_t size, Error *error);
 typedef void (*FilterClose)(void *this, Error *error);
@@ -91,7 +90,9 @@ typedef void (*FilterAbort)(void *this, Error *error);
 typedef size_t (*FilterSize)(void *this, size_t size);
 typedef off_t (*FilterSeek)(void *this, off_t position, Error *error);
 typedef size_t (*FilterBlockSize)(void *this, size_t size, Error *error);
-typedef size_t (*FilterDelete)(void *this, char *path, Error *error);
+typedef void (*FilterDelete)(void *this, const char *path, Error *error);
+typedef void* (*FilterClone)(void *this);
+typedef void (*FilterFree)(void *this);
 
 typedef struct FilterInterface {
     FilterOpen fnOpen;
@@ -103,6 +104,8 @@ typedef struct FilterInterface {
     FilterBlockSize fnBlockSize;
     FilterSeek fnSeek;
     FilterDelete fnDelete;
+	FilterClone fnClone;
+	FilterFree fnFree;
 } FilterInterface;
 
 /* Initialize the generic parts of a filter */
