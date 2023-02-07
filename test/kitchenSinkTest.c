@@ -2,16 +2,9 @@
 #include <stdio.h>
 #include <sys/fcntl.h>
 
-#include "encrypt/libcrypto/aead.h"
-#include "fileSplit/fileSplit.h"
-#include "compress/lz4/lz4.h"
-
-#include "iostack.h"
-#include "file/buffered.h"
-#include "file/fileSystemBottom.h"
-
-#include "framework/fileFramework.h"
-#include "framework/unitTest.h"
+#include "../src/iostack.h"
+#include "./framework/fileFramework.h"
+#include "./framework/unitTest.h"
 
 
 void testMain()
@@ -27,6 +20,6 @@ void testMain()
                         aeadFilterNew("AES-256-GCM", 1024, (Byte *)"0123456789ABCDEF0123456789ABCDEF", 32,
                             fileSplitNew(2 * 1024, formatPath, "%s-%06d.seg",
                                 fileSystemBottomNew()))))));
-    //singleStreamTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat", 1024, 16*1024);
+
     readSeekTest(stream, TEST_DIR "kitchen/testfile_%u_%u.dat");
 }

@@ -1,20 +1,19 @@
-//
-// Created by John Morris on 10/20/22.
-//
-//#define DEBUG
-#include "common/debug.h"
-#include <stdio.h>
-#include <sys/fcntl.h>
-#include "file/buffered.h"
-#include "file/fileSystemBottom.h"
-#include "compress/lz4/lz4.h"
-#include "iostack.h"
-#include "fileSplit/fileSplit.h"
+/**/
 
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/fcntl.h>
+#include <unistd.h>
+
+#define DEBUG
+#include "../../src/framework/debug.h"
+#include "../../src/iostack.h"
 #include "framework/fileFramework.h"
 #include "framework/unitTestInternal.h"
 
-void seekTest(IoStack *pipe, char *nameFmt);
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))
 
 /* Given the position in the seek, generate one byte of data for that position. */
 static inline Byte generateByte(size_t position)
@@ -37,6 +36,8 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
     for (size_t i = 0; i < size; i++)
     {
         Byte expected = generateByte(position + i);
+		if (expected != buf[i])
+			debug("verifyBuffer: i=%zu position=%zu  buf[i]=%c expected=%c\n", i, position, buf[i], expected);
         PG_ASSERT_EQ(expected, buf[i]);
     }
     return true;
@@ -49,52 +50,46 @@ bool verifyBuffer(size_t position, Byte *buf, size_t size)
  *   - doesn't align with typical block sizes, and
  *   - is compressible.
  */
-void generateFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
+void generateFile(IoStack *iostack, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("generateFile: path=%s\n", path);
-    Error error = errorOK;
-    fileOpen(file, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
-    Byte *buf = malloc(bufferSize);
+    PG_ASSERT(fileOpen(iostack, path, O_WRONLY|O_CREAT|O_TRUNC, 0));
+    Byte *buf = malloc(bufferSize); /* TODO: make buf be at end of struct */
 
     size_t position;
     for (position = 0; position < fileSize; position += bufferSize)
     {
-        size_t expected = sizeMin(bufferSize, fileSize-position);
+        size_t expected = MIN(bufferSize, fileSize-position);
         generateBuffer(position, buf, expected);
-        size_t actual = fileWrite(file, buf, expected, &error);
-        PG_ASSERT_OK(error);
-        PG_ASSERT_EQ(actual, expected);
+        size_t actual = fileWriteAll(iostack, buf, expected, position, 0);
+        PG_ASSERT_EQ(expected, actual);
     }
 
     free(buf);
-    fileClose(file, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileClose(iostack));
 }
 
-/* Verify a file has the correct data */
-void verifyFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
+/* Verify a iostack has the correct data */
+void verifyFile(IoStack *iostack, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("verifyFile: path=%s\n", path);
-    Error error = errorOK;
-    fileOpen(file, path, O_RDONLY, 0, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileOpen(iostack, path, O_RDONLY, 0));
     Byte *buf = malloc(bufferSize);
 
     for (size_t actual, position = 0; position < fileSize; position += actual)
     {
-        size_t expected = sizeMin(bufferSize, fileSize-position);
-        actual = fileRead(file, buf, bufferSize, &error);
-        PG_ASSERT_OK(error);
+        size_t expected = MIN(bufferSize, fileSize-position);
+        actual = fileReadAll(iostack, buf, bufferSize, position, 0);
         PG_ASSERT_EQ(expected, actual);
         PG_ASSERT(verifyBuffer(position, buf, actual));
     }
 
     // Read a final EOF.
-    fileRead(file, buf, bufferSize, &error);
-    PG_ASSERT_EOF(error);
+	PG_ASSERT(!fileEof(iostack));
+    fileReadAll(iostack, buf, 1, fileSize, 0);
+    PG_ASSERT(fileEof(iostack));
 
-    fileClose(file, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileClose(iostack));
 }
 
 /*
@@ -108,25 +103,20 @@ void allocateFile(IoStack *file, char *path, size_t fileSize, size_t bufferSize)
 {
     debug("allocateFile: path=%s\n", path);
     /* Start out by allocating space and filling the file with "X"s. */
-    Error error = errorOK;
-    fileOpen(file, path, O_WRONLY|O_CREAT|O_TRUNC, 0, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileOpen(file, path, O_WRONLY|O_CREAT|O_TRUNC, 0));
     Byte *buf = malloc(bufferSize);
     memset(buf, 'X', bufferSize);
 
     size_t position;
     for (position = 0; position < fileSize; position += bufferSize)
     {
-        size_t expected = sizeMin(bufferSize, fileSize-position);
-        size_t actual = fileWrite(file, buf, expected, &error);
-        PG_ASSERT_OK(error);
+        size_t expected = MIN(bufferSize, fileSize-position);
+        size_t actual = fileWriteAll(file, buf, expected, position, 0);
         PG_ASSERT_EQ(actual, expected);
     }
 
-    fileClose(file, &error);
+    PG_ASSERT(fileClose(file));
     free(buf);
-
-    PG_ASSERT_OK(error);
 }
 
 static const int prime = 3197;
@@ -138,9 +128,7 @@ void generateRandomFile(IoStack *file, char *path, size_t fileSize, size_t block
     size_t nrBlocks = (fileSize + blockSize - 1) / blockSize;
     PG_ASSERT( nrBlocks == 0 || (nrBlocks % prime) != 0);
 
-    Error error = errorOK;
-    fileOpen(file, path, O_RDWR, 0, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileOpen(file, path, O_RDWR, 0));
     Byte *buf = malloc(blockSize);
 
 
@@ -149,61 +137,49 @@ void generateRandomFile(IoStack *file, char *path, size_t fileSize, size_t block
         /* Pick a pseudo-random block and seek to it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
         //printf("fileSeek - idx = %u  blockNr=%u nrBlocks=%u\n", idx, (idx*prime)%nrBlocks, nrBlocks);
-        fileSeek(file, position, &error);
-        PG_ASSERT_OK(error);
 
         /* Generate data appropriate for that block. */
-        size_t expected = sizeMin(blockSize, fileSize - position);
+        size_t expected = MIN(blockSize, fileSize - position);
         generateBuffer(position, buf, expected);
 
         /* Write the block */
-        size_t actual = fileWrite(file, buf, expected, &error);
-        PG_ASSERT_OK(error);
+        size_t actual = fileWriteAll(file, buf, expected, position, 0);
         PG_ASSERT_EQ(actual, expected);
     }
 
-    fileClose(file, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileClose(file));
 }
 
-void appendFile(IoStack *file, char *path, size_t fileSize, size_t blockSize)
+void appendFile(IoStack *iostack, char *path, size_t fileSize, size_t blockSize)
 {
     debug("appendFile: path=%s\n", path);
-    Error error = errorOK;
-    fileOpen(file, path, O_RDWR, 0, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileOpen(iostack, path, O_RDWR, 0));
     Byte *buf = malloc(blockSize);
 
     /* Seek to the end of the file - should match file size */
-    off_t endPosition = fileSeek(file, FILE_END_POSITION, &error);
-    PG_ASSERT_OK(error);
-    PG_ASSERT_EQ(fileSize, endPosition);
+    off_t endPosition = fileSize(iostack);
 
     /* Write a new block at the end of file */
     generateBuffer(endPosition, buf, blockSize);
 
     /* Write the block */
-    size_t actual = fileWrite(file, buf, blockSize, &error);
-    PG_ASSERT_OK(error);
+    size_t actual = fileWriteAll(iostack, buf, blockSize, endPosition, 0);
     PG_ASSERT_EQ(actual, blockSize);
 
     /* Close the file and verify it is correct. */
-    fileClose(file, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileClose(iostack));
 
-    verifyFile(file, path, fileSize+blockSize, blockSize);
+    verifyFile(iostack, path, fileSize+blockSize, blockSize);
 }
 
 /*
- * Verify a file has the correct data through randomlike seeks.
- * This should do a complete verification - examining every byte of the file.
+ * Verify a ioStack has the correct data through randomlike seeks.
+ * This should do a complete verification - examining every byte of the ioStack.
  */
-void verifyRandomFile(IoStack *file, char *path, size_t fileSize, size_t blockSize)
+void verifyRandomFile(IoStack *ioStack, char *path, size_t fileSize, size_t blockSize)
 {
     debug("verifyRandomFile: path=%s\n", path);
-    Error error = errorOK;
-    fileOpen(file, path, O_RDONLY, 0, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileOpen(ioStack, path, O_RDONLY, 0));
     Byte *buf = malloc(blockSize);
 
     size_t nrBlocks = (fileSize + blockSize -1) / blockSize;
@@ -212,54 +188,42 @@ void verifyRandomFile(IoStack *file, char *path, size_t fileSize, size_t blockSi
     {
         /* Pick a pseudo-random block and read it */
         size_t position = ((idx * prime) % nrBlocks) * blockSize;
-        fileSeek(file, position, &error);
-        PG_ASSERT_OK(error);
-        size_t actual = fileRead(file, buf, blockSize, &error);
-        PG_ASSERT_OK(error);
+
+        size_t actual = fileReadAll(ioStack, buf, blockSize, position, 0);
 
         /* Verify we read the correct data */
-        size_t expected = sizeMin(blockSize, fileSize-position);
+        size_t expected = MIN(blockSize, fileSize-position);
         PG_ASSERT_EQ(actual, expected);
         PG_ASSERT(verifyBuffer(position, buf, actual));
     }
 
-    fileClose(file, &error);
-    PG_ASSERT_OK(error);
+    PG_ASSERT(fileClose(ioStack));
 }
 
 
 void deleteFile(IoStack *pipe, char *name)
 {
-    Error error = errorOK;
-    fileDelete(pipe, name, &error);
-    PG_ASSERT_OK(error);
+	unlink(name);
 }
 
 
 void openFile(IoStack *pipe, char *name)
 {
-	Error error = errorOK;
-	fileOpen(pipe, "BADNAME", O_RDWR, 0, &error);
-	PG_ASSERT_ERRNO(error, ENOENT);
 
-	error = errorOK;
-	fileOpen(pipe, "BADNAME2", O_RDONLY, 0, &error);
-	PG_ASSERT_ERRNO(error, ENOENT);
+	PG_ASSERT(!fileOpen(pipe, "BADNAME", O_RDWR, 0));
+	PG_ASSERT_EQ(errno, ENOENT);
 
-	error = errorOK;
-	fileOpen(pipe, "GOODNAME", O_CREAT | O_WRONLY, 0, &error);
-	fileClose(pipe, &error);
-	PG_ASSERT_OK(error);
+	PG_ASSERT(!fileOpen(pipe, "BADNAME2", O_RDONLY, 0));
+	PG_ASSERT_EQ(errno, ENOENT);
 
-	fileOpen(pipe, "GOODNAME", O_RDONLY, 0, &error);
-	fileClose(pipe, &error);
-	PG_ASSERT_OK(error);
+	PG_ASSERT(fileOpen(pipe, "GOODNAME", O_CREAT | O_WRONLY, 0));
+	PG_ASSERT(fileClose(pipe));
 
-	fileClose(pipe, &error);
-	PG_ASSERT_OK(error);
+	PG_ASSERT(fileOpen(pipe, "GOODNAME", O_RDONLY, 0));
+	PG_ASSERT(fileClose(pipe));
 
-	fileClose(pipe, &error);
-	PG_ASSERT_OK(error);
+	/* OK to close an already closed file */
+	PG_ASSERT(fileClose(pipe));
 
 	deleteFile(pipe, "GOODNAME");
 }

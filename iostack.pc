@@ -1,11 +1,12 @@
 
-prefix=/usr/local
-exec_prefix=${prefix}
+prefix=/usr/local/iostack
 includedir=${prefix}/include
 libdir=${exec_prefix}/lib
 
 Name: iostack
 Description: I/O Stack - fread/fwrite/fseek for encrypted + compressed files.
-Version: 1.0.0
-Cflags: -I${includedir}/iostack
-Libs: -L${libdir} -liostack
+Version: 1devel
+Cflags: -I${includedir}
+Libs: -L${libdir} -liostack -lcrypto -llz4
+
+Requires: lz4 crypto
