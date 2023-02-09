@@ -15,7 +15,7 @@ typedef struct IoStack IoStack;
 /*
  * Abstract functions required for each filter in an I/O Stack. TODO: declare as inline functions.
  */
-#define fileOpen(this, path, oflags, mode)       invoke(Open, this, path, oflags, mode)
+#define fileOpen(this, path, oflags, mode)       (fileClearError(this), invoke(Open, this, path, oflags, mode))
 #define fileWrite(this, buf, size, offset, ctx)  invoke(Write, this, buf, size, offset, (void *)ctx)
 #define fileRead(this, buf, size, offset, ctx)   invoke(Read,  this, buf, size, offset, (void *)ctx)
 #define fileSync(this, ctx)                      invoke(Sync, this, (void *)ctx)
@@ -29,9 +29,12 @@ typedef struct IoStack IoStack;
  */
 ssize_t fileWriteAll(IoStack *this, const Byte *buf, size_t size, off_t offset, void *ctx);
 ssize_t fileReadAll(IoStack *this, Byte *buf, size_t size, off_t offset, void *ctx);
+ssize_t fileReadSized(IoStack *this, Byte *buf, size_t size, off_t offset, void *ctx);
+ssize_t fileWriteSized(IoStack *this, const Byte *buf, size_t size, off_t offset, void *ctx);
+
+
 bool filePrintf(IoStack *this, const char *format, ...);
 bool fileScanf(IoStack *this, const char *format, ...);
-
 bool fileError(void *thisVoid);
 bool fileEof(void *thisVoid);
 void fileClearError(void *thisVoid);
@@ -47,6 +50,9 @@ uint16_t fileGet2(void *this);
 uint32_t fileGet4(void *this);
 uint64_t fileGet8(void *this);
 
+/* Release memory for I/O stack (after close) */
+void freeIoStack(IoStack *ioStack);
+
 /* Seek to the end of file */
 #define FILE_END_POSITION END
 
@@ -60,7 +66,7 @@ typedef struct IoStackInterface IoStackInterface;
 /* Filter for buffering data.  blockSize specifies the minimum size */
 IoStack *bufferedNew(size_t bufferSize, void *next);
 IoStack *lz4CompressNew(size_t blockSize, void *next);
-IoStack *aeadFilterNew(char *cipherName, size_t blockSize, Byte *key, size_t keyLen, void *next);
+IoStack *aeadNew(char *cipherName, size_t blockSize, Byte *key, size_t keyLen, void *next);
 
 /* Bottom filter for talking to Posix files */
 IoStack *fileSystemBottomNew();
@@ -73,10 +79,6 @@ IoStack *fileSystemBottomNew();
  */
 #define invoke(call, stack, ...)   (((IoStack *)stack)->iface->fn##call((void*)stack, __VA_ARGS__))
 #define invokeNoParms(call, stack) (((IoStack *)stack)->iface->fn##call((void*)stack))
-
-
-#define thisStack(this) ( (IoStack *)this )
-#define nextStack(this) ( thisStack(this)->next )
 
 
 struct IoStack

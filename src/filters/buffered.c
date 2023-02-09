@@ -27,15 +27,15 @@ struct Buffered
     IoStack iostack;        /* Common to all filters */
     size_t suggestedSize;   /* The suggested buffer size. We may make it a bit bigger */
 
-    Byte *buf;            /* Local buffer, precisely one block in size. */
-	size_t bufSize;     /* the size of the local buffer. TODO: rename to bufSize */
-    bool dirty;           /* Does the buffer contain dirty data? */
+    Byte *buf;             /* Local buffer, precisely one block in size. */
+	size_t bufSize;        /* the size of the local buffer. TODO: rename to bufSize */
+    bool dirty;            /* Does the buffer contain dirty data? */
 
-    off_t bufPosition;    /* File position of the beginning of the buffer */
-    size_t bufActual;     /* Nr of actual bytes in the buffer */
+    off_t bufPosition;     /* File position of the beginning of the buffer */
+    size_t bufActual;      /* Nr of actual bytes in the buffer */
 
-    off_t fileSize;       /* Highest byte position we've seen so far for the file. */
-    bool sizeConfirmed;   /* fileSize is confirmed as actual file size. */
+    off_t fileSize;        /* Highest byte position we've seen so far for the file. */
+    bool sizeConfirmed;    /* fileSize is confirmed as actual file size. */
 
     bool readable;        /* Opened for reading */
     bool writeable;       /* Opened for writing */
@@ -45,12 +45,12 @@ struct Buffered
 
 
 /* Forward references */
-static size_t copyOut(Buffered *this, Byte *buf, size_t size, off_t position);
-static size_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t position);
+static ssize_t copyOut(Buffered *this, Byte *buf, size_t size, off_t position);
+static ssize_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t position);
 static bool flushBuffer(Buffered *this, void *ctx);
 static bool fillBuffer(Buffered *this, void *ctx);
-static size_t directWrite(Buffered *this, const Byte *buf, size_t size, off_t offset, void *ctx);
-static size_t directRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx);
+static ssize_t directWrite(Buffered *this, const Byte *buf, size_t size, off_t offset, void *ctx);
+static ssize_t directRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx);
 static bool bufferedSeek(Buffered *this, off_t position, void *ctx);
 
 /**
@@ -58,6 +58,11 @@ static bool bufferedSeek(Buffered *this, off_t position, void *ctx);
  */
 bool bufferedOpen(Buffered *this, const char *path, int oflags, int perm)
 {
+
+	/* Are we read/writing or both? */
+	this->readable = (oflags & O_ACCMODE) != O_WRONLY;
+	this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
+
     /* Below us, we need to read/modify/write even if write only. */
     if ( (oflags & O_ACCMODE) == O_WRONLY)
         oflags = (oflags & ~O_ACCMODE) | O_RDWR;
@@ -65,11 +70,8 @@ bool bufferedOpen(Buffered *this, const char *path, int oflags, int perm)
 
     /* Open the downstream file */
     if (!fileOpen(nextStack(this), path, oflags, perm))
-		return !fileErrorNext(this);
+		return setNextError(this, false);
 
-    /* Are we read/writing or both? */
-    this->readable = (oflags & O_ACCMODE) != O_WRONLY;
-    this->writeable = (oflags & O_ACCMODE) != O_RDONLY;
 
     /* Position to the start of file with an empty buffer */
     this->bufPosition = 0;
@@ -77,9 +79,10 @@ bool bufferedOpen(Buffered *this, const char *path, int oflags, int perm)
     this->bufActual = 0;
 
     /* We don't know the size of the file yet. */
-    this->fileSize = (oflags & O_TRUNC)? 0: fileSize(this); /* TODO: don't request size if not needed */
+    this->fileSize = 0;
+	this->sizeConfirmed = (oflags & O_TRUNC) != 0;
 
-	/* Peek ahead and choose a buffer size which is a multiple of our successor's block size */
+	/* Peek ahead and choo)se a buffer size which is a multiple of our successor's block size */
 	this->bufSize = ROUNDUP(this->suggestedSize, nextStack(this)->blockSize);
     this->buf = malloc(this->bufSize);
 
@@ -130,24 +133,23 @@ size_t bufferedWrite(Buffered *this, const Byte *buf, size_t size, off_t offset,
 /*
  * Optimize writes by going directly to the next file if we don't need buffering.
  */
-size_t directWrite(Buffered *this, const Byte *buf, size_t size, off_t offset, void *ctx)
+ssize_t directWrite(Buffered *this, const Byte *buf, size_t size, off_t offset, void *ctx)
 {
 	debug("directWrite: size=%zu offset=%lld\n", size, offset);
 
     /* Write out multiple blocks, but no partials */
-    size_t alignedSize = ROUNDDOWN(size, this->bufSize);
-    size_t actual = fileWrite(nextStack(this), buf, alignedSize, offset, ctx);
+    ssize_t alignedSize = ROUNDDOWN(size, this->bufSize);
+    ssize_t actual = fileWrite(nextStack(this), buf, alignedSize, offset, ctx);
 
 	this->fileSize = MAX(this->fileSize, offset + actual);
-    fileErrorNext(this);
-	return actual;
+    return setNextError(this, actual);
 }
 
 /**
  * Read bytes from the buffered stream.
  * Note it may take multiple reads to get all the data or to reach EOF.
  */
-size_t bufferedRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx)
+ssize_t bufferedRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx)
 {
 	debug("bufferedRead: size=%zu  offset=%lld \n", size, offset);
 	assert(size > 0);
@@ -165,32 +167,32 @@ size_t bufferedRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *
 		return -1;
 
 	/* Copy data from the current buffer */
-	size_t actual = copyOut(this, buf, size, offset);
+	ssize_t actual = copyOut(this, buf, size, offset);
 
 	this->iostack.eof = (actual == 0);
 	return actual;
 }
 
 
-size_t directRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx)
+ssize_t directRead(Buffered *this, Byte *buf, size_t size, off_t offset, void *ctx)
 {
 	debug("directRead: size=%zu offset=%lld\n", size, offset);
 	/* Read multiple blocks, last one might be partial */
-	size_t alignedSize = ROUNDDOWN(size, this->bufSize);
-	size_t actual = fileRead(nextStack(this), buf, alignedSize, offset, ctx);
+	ssize_t alignedSize = ROUNDDOWN(size, this->bufSize);
+	ssize_t actual = fileRead(nextStack(this), buf, alignedSize, offset, ctx);
 
 	/* update fileSize */
-	if (!fileErrorNext(this))
+	if (actual > 0)
         this->fileSize = MAX(this->fileSize, offset + actual);
 
-	return actual;
+	return setNextError(this, actual);
 }
 
 
 /**
  * Seek to a position
  */
-bool bufferedSeek(Buffered *this, off_t position, void *ctx)
+static bool bufferedSeek(Buffered *this, off_t position, void *ctx)
 {
     /* Do nothing if we are already position at the proper block */
     off_t newBlock = ROUNDDOWN(position, this->bufSize);
@@ -224,8 +226,8 @@ bool bufferedClose(Buffered *this)
     if (this->buf != NULL)
         free(this->buf);
 	this->buf = NULL;
-	debug("bufferedClose(end): success=%d\n", success);
 
+	debug("bufferedClose(end): success=%d\n", success);
 	return success;
 }
 
@@ -241,6 +243,9 @@ bool bufferedSync(Buffered *this, void *ctx)
     /* Pass on the sync request, even if flushing fails. */
     success &= fileSync(nextStack(this), ctx); /* TODO: fileErrorNext */
 
+	if (!fileError(this))
+		setNextError(this, success);
+
 	return success;
 }
 
@@ -255,7 +260,7 @@ bool bufferedTruncate(Buffered *this, off_t offset)
 
 	/* Truncate the underlying file */
 	if (!fileTruncate(nextStack(this), offset))
-		return false;
+		return setNextError(this, false);
 
 	/* Update our buffer so it ends at that position */
 	this->bufActual = offset - this->bufPosition;
@@ -275,8 +280,7 @@ off_t bufferedSize(Buffered *this)
 		return -1;
 
 	off_t size = fileSize(nextStack(this));
-	fileErrorNext(this);
-	return size;
+	return setNextError(this, size);
 }
 
 
@@ -328,7 +332,7 @@ static bool flushBuffer(Buffered *this, void *ctx)
 	if (this->dirty)
 	{
 		if (fileWriteAll(nextStack(this), this->buf, this->bufActual, this->bufPosition, ctx) < 0)
-			return fileErrorNext(this);
+			return setNextError(this, false);
 
 		/* Update file size */
 		this->fileSize = MAX(this->fileSize, this->bufPosition + this->bufActual);
@@ -365,8 +369,8 @@ static bool fillBuffer (Buffered *this, void *ctx)
 
 	/* Read in the current buffer */
 	this->bufActual = fileReadAll(nextStack(this), this->buf, this->bufSize, this->bufPosition, ctx);
-	if (fileErrorNext(this))
-		return false;
+	if (this->bufActual < 0)
+		return setNextError(this, false);
 
 	/* if EOF or partial read, update the known file size */
 	this->sizeConfirmed |= (this->bufActual < this->bufSize);
@@ -376,7 +380,7 @@ static bool fillBuffer (Buffered *this, void *ctx)
 }
 
 /* Copy user data from the user, respecting boundaries */
-static size_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t position)
+static ssize_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t position)
 {
 	debug("copyIn: position=%lld  size=%zu bufPosition=%lld bufActual=%zu\n", position, size, this->bufPosition, this->bufActual);
 	assert(this->bufPosition == ROUNDDOWN(position, this->bufSize));
@@ -390,7 +394,7 @@ static size_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t positio
 
 	/* Copy bytes into the buffer, up to end of data or end of buffer */
 	off_t offset = position - this->bufPosition;
-    size_t actual = MIN(this->bufSize - offset, size);
+    ssize_t actual = MIN(this->bufSize - offset, size);
     memcpy(this->buf + offset, buf, actual);
 	this->dirty = true;
 
@@ -404,7 +408,7 @@ static size_t copyIn(Buffered *this, const Byte *buf, size_t size, off_t positio
 
 
 /* Copy data to the user, respecting boundaries */
-static size_t copyOut(Buffered *this, Byte *buf, size_t size, off_t position)
+static ssize_t copyOut(Buffered *this, Byte *buf, size_t size, off_t position)
 {
 	/* Check to see if we are skipping over holes */
 	size_t offset = position - this->bufPosition;
@@ -415,7 +419,7 @@ static size_t copyOut(Buffered *this, Byte *buf, size_t size, off_t position)
 	}
 
 	/* Copy bytes out of the buffer, up to end of data or end of buffer */
-    size_t actual = MIN(this->bufActual - offset, size);
+    ssize_t actual = MIN(this->bufActual - offset, size);
     memcpy(buf, this->buf + offset, actual);
     debug("copyOut: size=%zu bufPosition=%lld bufActual=%zu offset=%zu  actual=%zu\n",
           size, this->bufPosition, this->bufActual, offset, actual);

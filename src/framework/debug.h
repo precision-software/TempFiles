@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 
-//#define DEBUG
+#define DEBUG
 #ifndef DEBUG
 #define debug(...) ((void) 0)
 #else

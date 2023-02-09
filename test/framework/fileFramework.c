@@ -14,6 +14,12 @@
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
+#define countof(array) (sizeof(array)/sizeof(array[0]))
+
+/* Matrix of file and block sizes for testing. */
+size_t fileSize[] = {0, 1024, 1, 64, 1027, 7*1024, 32*1024 + 127};
+size_t blockSize[] = {1024, 4 * 1024, 3 * 1024 + 357, 1024 - 237, 64, 1};
+
 
 /* Given the position in the seek, generate one byte of data for that position. */
 static inline Byte generateByte(size_t position)
@@ -207,38 +213,48 @@ void deleteFile(IoStack *pipe, char *name)
 }
 
 
-void openFile(IoStack *pipe, char *name)
+void regression(IoStack *pipe, char *name)
 {
 
-	PG_ASSERT(!fileOpen(pipe, "BADNAME", O_RDWR, 0));
+    deleteFile(pipe, name);
+
+	/* Shouldn't open a non-existent file - various modes)
+	PG_ASSERT(!fileOpen(pipe, name, O_RDWR, 0));
 	PG_ASSERT_EQ(errno, ENOENT);
 
-	PG_ASSERT(!fileOpen(pipe, "BADNAME2", O_RDONLY, 0));
+	PG_ASSERT(!fileOpen(pipe, name, O_RDONLY, 0));
 	PG_ASSERT_EQ(errno, ENOENT);
 
-	PG_ASSERT(fileOpen(pipe, "GOODNAME", O_CREAT | O_WRONLY, 0));
+	/* OK to create a file and reopen readonly */
+	PG_ASSERT(fileOpen(pipe, name, O_CREAT | O_WRONLY | O_TRUNC, 0));
 	PG_ASSERT(fileClose(pipe));
 
-	PG_ASSERT(fileOpen(pipe, "GOODNAME", O_RDONLY, 0));
+	PG_ASSERT(fileOpen(pipe, name, O_RDONLY, 0));
 	PG_ASSERT(fileClose(pipe));
 
 	/* OK to close an already closed file */
 	PG_ASSERT(fileClose(pipe));
 
-	deleteFile(pipe, "GOODNAME");
+	/* Shouldn't open an already open file */
+
+	/* Should read EOF on empty file */
+
+	/* Should seek to end and read EOF */
+
+	deleteFile(pipe, name);
 }
 
 
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleSeekTest(CreateStackFn createStack, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
     beginTest(fileName);
 
-	openFile(pipe, fileName);
+	IoStack *pipe = createStack(bufferSize);
 
     /* create and read back as a stream */
     generateFile(pipe, fileName, fileSize, bufferSize);
@@ -256,34 +272,34 @@ void singleSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t buffer
     /* Read back as random reads */
     verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
 
+	regression(pipe, fileName);
+
     /* Clean things up */
     deleteFile(pipe, fileName);
+	freeIoStack(pipe);
 }
 
 /* run a matrix of tests for various file sizes and I/O sizes.  All will use a 1K block size. */
-void seekTest(IoStack *pipe, char *nameFmt)
+void seekTest(CreateStackFn createStack, char *nameFmt)
 {
-    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
-    size_t bufSize[] = {1024, 32*1024, 64, 35, 2037, 1};
-#define countof(array) (sizeof(array)/sizeof(array[0]))
-
     for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)
-        for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
-            if  (fileSize[fileIdx] / bufSize[bufIdx] < 4*1024*1024)  // Keep nr blocks under 4M to complete in reasonable time.
-                singleSeekTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
+        for (int bufIdx = 0; bufIdx<countof(blockSize); bufIdx++)
+            if  (fileSize[fileIdx] / blockSize[bufIdx] < 4 * 1024 * 1024)  // Keep nr blocks under 4M to complete in reasonable time.
+                singleSeekTest(createStack, nameFmt, fileSize[fileIdx], blockSize[bufIdx]);
 }
 
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleStreamTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleStreamTest(CreateStackFn newStack, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
 
     beginTest(fileName);
 
-	openFile(pipe, fileName);
+	IoStack *pipe = newStack(bufferSize);
+
 
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
@@ -291,34 +307,33 @@ void singleStreamTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t buff
     appendFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize+bufferSize, 16*1024);
 
+	regression(pipe, fileName);
+
     /* Clean things up */
     deleteFile(pipe, fileName);
+	freeIoStack(pipe);
 }
 
 
 /* run a matrix of tests for various file sizes and buffer sizes */
-void streamTest(IoStack *pipe, char *nameFmt)
+void streamTest(CreateStackFn createStack, char *nameFmt)
 {
-    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
-    size_t bufSize[] = {1024, 32*1024, 64, 1};
-#define countof(array) (sizeof(array)/sizeof(array[0]))
-
     for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)
-        for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
-            singleStreamTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
+        for (int bufIdx = 0; bufIdx<countof(blockSize); bufIdx++)
+            singleStreamTest(createStack, nameFmt, fileSize[fileIdx], blockSize[bufIdx]);
 }
 
 
 
 /* Run a test on a single configuration determined by file size and buffer size */
-void singleReadSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bufferSize)
+void singleReadSeekTest(CreateStackFn createStack, char *nameFmt, size_t fileSize, size_t bufferSize)
 {
     char fileName[PATH_MAX];
     snprintf(fileName, sizeof(fileName), nameFmt, fileSize, bufferSize);
 
     beginTest(fileName);
 
-	openFile(pipe, fileName);
+	IoStack *pipe = createStack(bufferSize);
 
     generateFile(pipe, fileName, fileSize, bufferSize);
     verifyFile(pipe, fileName, fileSize, bufferSize);
@@ -328,19 +343,18 @@ void singleReadSeekTest(IoStack *pipe, char *nameFmt, size_t fileSize, size_t bu
     appendFile(pipe, fileName, fileSize, bufferSize);
     verifyRandomFile(pipe, fileName, fileSize+bufferSize, bufferSize);
 
+	regression(pipe, fileName);
+
     /* Clean things up */
     deleteFile(pipe, fileName);
+	freeIoStack(pipe);
 }
 
 
 /* run a matrix of tests for various file sizes and buffer sizes */
-void readSeekTest(IoStack *pipe, char *nameFmt)
+void readSeekTest(CreateStackFn createStack, char *nameFmt)
 {
-    size_t fileSize[] = {1024, 0, 64, 1027, 1, 1024*1024, 64*1024*1024 + 127};
-    size_t bufSize[] = {1024, 32*1024, 64, 1};
-#define countof(array) (sizeof(array)/sizeof(array[0]))
-
     for (int fileIdx = 0; fileIdx<countof(fileSize); fileIdx++)
-        for (int bufIdx = 0; bufIdx<countof(bufSize); bufIdx++)
-            singleStreamTest(pipe, nameFmt, fileSize[fileIdx], bufSize[bufIdx]);
+        for (int bufIdx = 0; bufIdx<countof(blockSize); bufIdx++)
+            singleReadSeekTest(createStack, nameFmt, fileSize[fileIdx], blockSize[bufIdx]);
 }

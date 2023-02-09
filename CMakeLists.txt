@@ -9,7 +9,7 @@ find_package(OpenSSL)
 
 # Build a library consisting of all sources under "src"
 #file(GLOB_RECURSE SOURCES  RELATIVE ${CMAKE_SOURCE_DIR} "src/*.c")
-set(SOURCES src/filters/fileSystemBottom.c src/framework/iostack.c src/filters/buffered.c)
+set(SOURCES src/filters/fileSystemBottom.c src/framework/iostack.c src/filters/buffered.c src/filters/aead.c)
 
 add_library(iostack STATIC ${SOURCES})
 
@@ -33,6 +33,6 @@ link_libraries( crypto  lz4 iostack )
 add_executable(rawTest test/rawTest.c test/framework/fileFramework.c)
 add_executable(bufferedTest test/bufferedTest.c test/framework/fileFramework.c)
 #add_executable(fileSplitTest test/fileSplitTest.c test/framework/fileFramework.c)
-#add_executable(aeadTest test/aeadTest.c test/framework/fileFramework.c)
+add_executable(aeadTest test/aeadTest.c test/framework/fileFramework.c)
 #add_executable(lz4Test test/lz4Test.c test/framework/fileFramework.c)
 #dd_executable(kitchenSinkTest test/kitchenSinkTest.c test/framework/fileFramework.c)

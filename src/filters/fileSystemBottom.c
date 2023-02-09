@@ -54,10 +54,10 @@ bool fileSystemOpen(FileSystemBottom *this, const char *path, int oflags, int pe
  */
 ssize_t fileSystemWrite(FileSystemBottom *this, const Byte *buf, size_t bufSize, off_t offset, void *ctx)
 {
-
     /* Write the data. */
+	errno = 0; /* TODO: remove */
     ssize_t ret = pwrite(this->fd, buf, bufSize, offset);
-	debug("fileSystemWrite: bufSize=%zu offset=%lld  ret=%zu\n", bufSize, offset, ret);
+	debug("fileSystemWrite: fd=%d bufSize=%zu offset=%lld  ret=%zd errno=%d\n", this->fd, bufSize, offset, ret, errno);
 
 	/* If unable to write the entire buffer, assume ran out of space. */
 	/* TODO: EINTR? */
@@ -78,11 +78,12 @@ ssize_t fileSystemWrite(FileSystemBottom *this, const Byte *buf, size_t bufSize,
 ssize_t fileSystemRead(FileSystemBottom *this, Byte *buf, size_t size, off_t offset)
 {
     // Do the actual read.
+	errno = 0; /* TODO: remove */
     ssize_t ret = pread(this->fd, buf, size, offset);
-	debug("fileSystemRead: size=%zu offset=%lld  ret=%zu\n", size, offset, ret);
+	debug("fileSystemRead: fd=%d size=%zu offset=%lld  ret=%zd  errno=%d\n", this->fd, size, offset, ret, errno);
 
-	/* Check for end of file. Gets cleared by fileClearError */
-	this->iostack.eof |= (ret ==  0);
+	/* Check for end of file. */
+	this->iostack.eof = (ret ==  0);
 
 	return setSystemError(this, ret, "fileSystemRead");
 }
@@ -93,7 +94,8 @@ ssize_t fileSystemRead(FileSystemBottom *this, Byte *buf, size_t size, off_t off
  */
 bool fileSystemClose(FileSystemBottom *this)
 {
-	int ret = 0;
+	debug("fileSystemClose: fd=%d\n", this->fd);
+	ssize_t ret = 0;
 
     /* Close the fd if it was opened earlier. */
 	if (this->fd != -1)
@@ -138,6 +140,7 @@ off_t fileSystemSize(FileSystemBottom *this)
 	if (size == (off_t)-1)
 		setSystemError(this, -1, "fileSystemSize");
 
+	debug("fileSystemSize: fd=%d  size=%lld\n", this->fd, size);
 	return size;
 }
 

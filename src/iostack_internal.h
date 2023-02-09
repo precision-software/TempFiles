@@ -24,8 +24,18 @@ This is a "header only" file.
 #endif
 
 #include "./iostack.h"
+#include "./framework/debug.h"
 
-/* TODO: not all are on performance path, so review which should be inlined.*/
+/* Upper limit on the block sizes we suport. Basically 16Mb with some extra space, say for nonces. */
+#define MAX_BLOCK_SIZE (16*1024*1024)
+
+/* Helpers to access the generic IoStack functions */
+#define thisStack(this) ( (IoStack *)this )
+#define nextStack(this) ( thisStack(this)->next )
+
+
+/* TODO: not all are on performance path, so review which should be inlined.
+ * Also, adopt the general form:   setXXXError(this, retval, msg); */
 
 /* Set error information and return -1 */
 inline static int setError(void *thisVoid, int errNo, const char *fmt, va_list args)
@@ -34,6 +44,7 @@ inline static int setError(void *thisVoid, int errNo, const char *fmt, va_list a
 
 	this->errNo = errNo;
 	snprintf(this->errMsg, sizeof(this->errMsg), fmt, args);
+	debug("setError  this=%p  errNo=%d  msg=%s eof=%d\n", this, this->errNo, this->errMsg, this->eof);
 
 	/* restore the errno so caller can still test it */
 	errno = errNo;
@@ -54,8 +65,9 @@ inline static ssize_t setIoStackError(void *this, const char *fmt, ...)
 
 
 /* Check for a  system error, returning the retval */
-inline static ssize_t setSystemError(void *this, ssize_t retval, const char *fmt, ...)
+inline static ssize_t setSystemError(void *thisVoid, ssize_t retval, const char *fmt, ...)
 {
+	IoStack *this = thisVoid;
 	/* If a system error occured ... */
 	if (retval < 0)
 	{
@@ -77,7 +89,21 @@ inline static ssize_t setSystemError(void *this, ssize_t retval, const char *fmt
 }
 
 
-bool fileErrorNext(void *thisVoid);
+inline static ssize_t setNextError(void *thisVoid, ssize_t retval)
+{
+	IoStack *this = thisVoid;
+
+	/* Get the EOF info from our successor */
+	thisStack(this)->eof = fileEof(nextStack(this));
+
+	/* Fetch the error info as well */
+	fileErrorInfo(nextStack(this), &thisStack(this)->errNo, thisStack(this)->errMsg);
+
+	/* return the passed in retval */
+	return retval;
+}
+
+
 
 /* Some convenient macros */
 #define MAX(a,b) ( ((a)>(b))?(a):(b) )
